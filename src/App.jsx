@@ -14,15 +14,22 @@ export default function App() {
   const activeTheme = useMemo(() => (themeMode === 'dark' ? darkTheme : theme), [themeMode])
 
   useEffect(() => {
-    let cleanup
-    initialize().then((fn) => { cleanup = fn })
-    return () => cleanup?.()
+    let unsub = null
+    let cancelled = false
+    initialize().then((fn) => {
+      if (cancelled) fn?.()
+      else unsub = fn
+    })
+    return () => {
+      cancelled = true
+      unsub?.()
+    }
   }, [])
 
   useEffect(() => {
-    const handleVisibility = () => {
+    const handleVisibility = async () => {
       if (document.visibilityState === 'visible') {
-        refreshSession()
+        await refreshSession()
         bumpRefreshSignal()
       }
     }
