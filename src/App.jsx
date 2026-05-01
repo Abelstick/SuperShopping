@@ -7,6 +7,7 @@ import { router } from './routes'
 import { theme, darkTheme } from './theme'
 import { useAuthStore } from './features/auth/store/authStore'
 import { useAppStore } from './store/appStore'
+import PWAUpdateBanner from './shared/components/PWAUpdateBanner'
 
 export default function App() {
   const { initialize, refreshSession } = useAuthStore()
@@ -45,6 +46,7 @@ export default function App() {
         anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
         autoHideDuration={3000}
       >
+        <PWAUpdateBanner />
         <RouterProvider router={router} />
       </SnackbarProvider>
     </ThemeProvider>
