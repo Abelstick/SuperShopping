@@ -82,7 +82,7 @@ export default function WorkspacesPage() {
 
   useEffect(() => {
     if (user) fetchWorkspaces(user.id)
-  }, [user])
+  }, [user?.id])
 
   const openCreate = () => { setEditingWorkspace(null); setForm({ name: '', description: '' }); setDialogOpen(true) }
   const openEdit = (ws) => { setEditingWorkspace(ws); setForm({ name: ws.name, description: ws.description || '' }); setDialogOpen(true) }

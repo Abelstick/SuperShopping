@@ -15,36 +15,39 @@ export const useWorkspaceStore = create(
 
       fetchWorkspaces: async (userId) => {
         set({ loading: true })
-        const { data, error } = await supabase
-          .from('workspace_members')
-          .select(`
-            role,
-            joined_at,
-            workspaces (
-              id, name, description, owner_id, created_at,
-              profiles!workspaces_owner_id_fkey (full_name, email)
-            )
-          `)
-          .eq('user_id', userId)
+        try {
+          const { data, error } = await supabase
+            .from('workspace_members')
+            .select(`
+              role,
+              joined_at,
+              workspaces (
+                id, name, description, owner_id, created_at,
+                profiles!workspaces_owner_id_fkey (full_name, email)
+              )
+            `)
+            .eq('user_id', userId)
 
-        if (!error && data) {
-          const workspaces = data.map((d) => ({
-            ...d.workspaces,
-            my_role: d.role,
-            joined_at: d.joined_at,
-          }))
-          set({ workspaces })
+          if (!error && data) {
+            const workspaces = data.map((d) => ({
+              ...d.workspaces,
+              my_role: d.role,
+              joined_at: d.joined_at,
+            }))
+            set({ workspaces })
 
-          const { currentWorkspace } = get()
-          if (!currentWorkspace && workspaces.length > 0) {
-            set({ currentWorkspace: workspaces[0] })
-          } else if (currentWorkspace) {
-            const updated = workspaces.find((w) => w.id === currentWorkspace.id)
-            if (updated) set({ currentWorkspace: updated })
+            const { currentWorkspace } = get()
+            if (!currentWorkspace && workspaces.length > 0) {
+              set({ currentWorkspace: workspaces[0] })
+            } else if (currentWorkspace) {
+              const updated = workspaces.find((w) => w.id === currentWorkspace.id)
+              if (updated) set({ currentWorkspace: updated })
+            }
           }
+          return { error }
+        } finally {
+          set({ loading: false })
         }
-        set({ loading: false })
-        return { error }
       },
 
       createWorkspace: async (name, description, userId) => {

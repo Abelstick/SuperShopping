@@ -9,14 +9,17 @@ export const usePurchaseStore = create((set, get) => ({
 
   fetchPurchases: async (workspaceId) => {
     set({ loading: true })
-    const { data, error } = await supabase
-      .from('purchases')
-      .select(`*, profiles!purchases_executed_by_fkey(full_name, avatar_url), budgets(name)`)
-      .eq('workspace_id', workspaceId)
-      .order('created_at', { ascending: false })
-    if (!error) set({ purchases: data || [] })
-    set({ loading: false })
-    return { error }
+    try {
+      const { data, error } = await supabase
+        .from('purchases')
+        .select(`*, profiles!purchases_executed_by_fkey(full_name, avatar_url), budgets(name)`)
+        .eq('workspace_id', workspaceId)
+        .order('created_at', { ascending: false })
+      if (!error) set({ purchases: data || [] })
+      return { error }
+    } finally {
+      set({ loading: false })
+    }
   },
 
   createPurchase: async (workspaceId, purchase, userId) => {
@@ -31,14 +34,17 @@ export const usePurchaseStore = create((set, get) => ({
 
   fetchPurchaseWithItems: async (purchaseId) => {
     set({ loading: true })
-    const [purchRes, itemsRes] = await Promise.all([
-      supabase.from('purchases').select(`*, profiles!purchases_executed_by_fkey(full_name, avatar_url), budgets(name)`).eq('id', purchaseId).single(),
-      supabase.from('purchase_items').select(`*, profiles!purchase_items_purchased_by_fkey(full_name), categories(name, color)`).eq('purchase_id', purchaseId),
-    ])
-    if (!purchRes.error) set({ currentPurchase: purchRes.data })
-    if (!itemsRes.error) set({ purchaseItems: itemsRes.data || [] })
-    set({ loading: false })
-    return { error: purchRes.error || itemsRes.error }
+    try {
+      const [purchRes, itemsRes] = await Promise.all([
+        supabase.from('purchases').select(`*, profiles!purchases_executed_by_fkey(full_name, avatar_url), budgets(name)`).eq('id', purchaseId).single(),
+        supabase.from('purchase_items').select(`*, profiles!purchase_items_purchased_by_fkey(full_name), categories(name, color)`).eq('purchase_id', purchaseId),
+      ])
+      if (!purchRes.error) set({ currentPurchase: purchRes.data })
+      if (!itemsRes.error) set({ purchaseItems: itemsRes.data || [] })
+      return { error: purchRes.error || itemsRes.error }
+    } finally {
+      set({ loading: false })
+    }
   },
 
   updatePurchase: async (id, updates) => {

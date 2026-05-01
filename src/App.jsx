@@ -10,7 +10,7 @@ import { useAppStore } from './store/appStore'
 
 export default function App() {
   const { initialize, refreshSession } = useAuthStore()
-  const { themeMode } = useAppStore()
+  const { themeMode, bumpRefreshSignal } = useAppStore()
   const activeTheme = useMemo(() => (themeMode === 'dark' ? darkTheme : theme), [themeMode])
 
   useEffect(() => {
@@ -21,7 +21,10 @@ export default function App() {
 
   useEffect(() => {
     const handleVisibility = () => {
-      if (document.visibilityState === 'visible') refreshSession()
+      if (document.visibilityState === 'visible') {
+        refreshSession()
+        bumpRefreshSignal()
+      }
     }
     document.addEventListener('visibilitychange', handleVisibility)
     return () => document.removeEventListener('visibilitychange', handleVisibility)

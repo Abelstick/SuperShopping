@@ -13,6 +13,7 @@ import { useSnackbar } from 'notistack'
 import { useAuthStore } from '@/features/auth/store/authStore'
 import { useWorkspaceStore } from '@/features/workspace/store/workspaceStore'
 import { useBudgetStore } from '../store/budgetStore'
+import { useAppStore } from '@/store/appStore'
 import BudgetForm from '../components/BudgetForm'
 
 const STATUS_META = {
@@ -164,13 +165,14 @@ export default function BudgetsPage() {
   const { user } = useAuthStore()
   const { currentWorkspace } = useWorkspaceStore()
   const { budgets, loading, fetchBudgets, updateBudget, deleteBudget, duplicateBudget } = useBudgetStore()
+  const { refreshSignal } = useAppStore()
   const { enqueueSnackbar } = useSnackbar()
   const [formDialog, setFormDialog] = useState({ open: false, budget: null })
   const [deleteConfirm, setDeleteConfirm] = useState(null)
 
   useEffect(() => {
     if (currentWorkspace) fetchBudgets(currentWorkspace.id)
-  }, [currentWorkspace?.id])
+  }, [currentWorkspace?.id, refreshSignal])
 
   const handleDelete = async () => {
     const { error } = await deleteBudget(deleteConfirm.id)

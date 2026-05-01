@@ -9,14 +9,17 @@ export const useBudgetStore = create((set, get) => ({
 
   fetchBudgets: async (workspaceId) => {
     set({ loading: true })
-    const { data, error } = await supabase
-      .from('budgets')
-      .select(`*, profiles!budgets_created_by_fkey(full_name)`)
-      .eq('workspace_id', workspaceId)
-      .order('created_at', { ascending: false })
-    if (!error) set({ budgets: data || [] })
-    set({ loading: false })
-    return { error }
+    try {
+      const { data, error } = await supabase
+        .from('budgets')
+        .select(`*, profiles!budgets_created_by_fkey(full_name)`)
+        .eq('workspace_id', workspaceId)
+        .order('created_at', { ascending: false })
+      if (!error) set({ budgets: data || [] })
+      return { error }
+    } finally {
+      set({ loading: false })
+    }
   },
 
   createBudget: async (workspaceId, budget, userId) => {
@@ -53,14 +56,17 @@ export const useBudgetStore = create((set, get) => ({
 
   fetchBudgetWithItems: async (budgetId) => {
     set({ loading: true })
-    const [budgetRes, itemsRes] = await Promise.all([
-      supabase.from('budgets').select(`*, profiles!budgets_created_by_fkey(full_name)`).eq('id', budgetId).single(),
-      supabase.from('budget_items').select(`*, categories(id, name, color, icon, aisle), products(id, name, unit)`).eq('budget_id', budgetId).order('sort_order'),
-    ])
-    if (!budgetRes.error) set({ currentBudget: budgetRes.data })
-    if (!itemsRes.error) set({ budgetItems: itemsRes.data || [] })
-    set({ loading: false })
-    return { error: budgetRes.error || itemsRes.error }
+    try {
+      const [budgetRes, itemsRes] = await Promise.all([
+        supabase.from('budgets').select(`*, profiles!budgets_created_by_fkey(full_name)`).eq('id', budgetId).single(),
+        supabase.from('budget_items').select(`*, categories(id, name, color, icon, aisle), products(id, name, unit)`).eq('budget_id', budgetId).order('sort_order'),
+      ])
+      if (!budgetRes.error) set({ currentBudget: budgetRes.data })
+      if (!itemsRes.error) set({ budgetItems: itemsRes.data || [] })
+      return { error: budgetRes.error || itemsRes.error }
+    } finally {
+      set({ loading: false })
+    }
   },
 
   addBudgetItem: async (budgetId, item) => {

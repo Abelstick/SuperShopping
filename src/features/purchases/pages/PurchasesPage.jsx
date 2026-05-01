@@ -11,6 +11,7 @@ import { useNavigate } from 'react-router-dom'
 import { useSnackbar } from 'notistack'
 import { useWorkspaceStore } from '@/features/workspace/store/workspaceStore'
 import { usePurchaseStore } from '../store/purchaseStore'
+import { useAppStore } from '@/store/appStore'
 
 function groupByMonth(purchases) {
   const groups = {}
@@ -117,12 +118,13 @@ export default function PurchasesPage() {
   const navigate = useNavigate()
   const { currentWorkspace } = useWorkspaceStore()
   const { purchases, loading, fetchPurchases, deletePurchase } = usePurchaseStore()
+  const { refreshSignal } = useAppStore()
   const { enqueueSnackbar } = useSnackbar()
   const [deleteConfirm, setDeleteConfirm] = useState(null)
 
   useEffect(() => {
     if (currentWorkspace) fetchPurchases(currentWorkspace.id)
-  }, [currentWorkspace?.id])
+  }, [currentWorkspace?.id, refreshSignal])
 
   const handleDelete = async () => {
     const { error } = await deletePurchase(deleteConfirm.id)

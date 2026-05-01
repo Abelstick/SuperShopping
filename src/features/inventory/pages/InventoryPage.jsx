@@ -15,6 +15,7 @@ import { useSnackbar } from 'notistack'
 import { useAuthStore } from '@/features/auth/store/authStore'
 import { useWorkspaceStore } from '@/features/workspace/store/workspaceStore'
 import { useInventoryStore } from '../store/inventoryStore'
+import { useAppStore } from '@/store/appStore'
 import ProductForm from '../components/ProductForm'
 import CategoryManager from '../components/CategoryManager'
 import ProductHistoryDrawer from '../components/ProductHistoryDrawer'
@@ -210,6 +211,7 @@ export default function InventoryPage() {
     products, categories, loading, filters, setFilters,
     fetchProducts, fetchCategories, deleteProduct, hardDeleteProduct, getFilteredProducts,
   } = useInventoryStore()
+  const { refreshSignal } = useAppStore()
   const { enqueueSnackbar } = useSnackbar()
   const [view, setView] = useState('grid')
   const [tab, setTab] = useState(0)
@@ -224,7 +226,7 @@ export default function InventoryPage() {
       fetchProducts(currentWorkspace.id)
       fetchCategories(currentWorkspace.id)
     }
-  }, [currentWorkspace?.id])
+  }, [currentWorkspace?.id, refreshSignal])
 
   const filtered = getFilteredProducts()
   const isEditor = ['owner', 'editor'].includes(currentWorkspace?.my_role)

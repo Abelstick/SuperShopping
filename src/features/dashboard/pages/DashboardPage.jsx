@@ -20,6 +20,7 @@ import { useWorkspaceStore } from '@/features/workspace/store/workspaceStore'
 import { useInventoryStore } from '@/features/inventory/store/inventoryStore'
 import { useBudgetStore } from '@/features/budgets/store/budgetStore'
 import { usePurchaseStore } from '@/features/purchases/store/purchaseStore'
+import { useAppStore } from '@/store/appStore'
 
 const ACCENTS = {
   indigo:  { bg: 'rgba(99,102,241,0.12)',  color: '#6366f1' },
@@ -128,6 +129,7 @@ export default function DashboardPage() {
   const { products, fetchProducts, fetchCategories, deactivateProducts, loading: invLoading } = useInventoryStore()
   const { budgets, fetchBudgets, loading: budgLoading } = useBudgetStore()
   const { purchases, fetchPurchases, deletePurchases, getSpendingByUser, getMonthlySpending, loading: purchLoading } = usePurchaseStore()
+  const { refreshSignal } = useAppStore()
 
   // ── Selection state
   const [purchSelectMode, setPurchSelectMode]       = useState(false)
@@ -147,7 +149,7 @@ export default function DashboardPage() {
       fetchPurchases(currentWorkspace.id)
       fetchMembers(currentWorkspace.id)
     }
-  }, [currentWorkspace?.id])
+  }, [currentWorkspace?.id, refreshSignal])
 
   // ── Derived stats
   const totalSpent     = useMemo(() => purchases.reduce((a, p) => a + (p.total_amount || 0), 0), [purchases])

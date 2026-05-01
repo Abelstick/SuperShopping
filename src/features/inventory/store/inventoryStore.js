@@ -49,14 +49,17 @@ export const useInventoryStore = create((set, get) => ({
 
   fetchProducts: async (workspaceId) => {
     set({ loading: true })
-    const { data, error } = await supabase
-      .from('products')
-      .select(`*, categories(id, name, color, icon, aisle), profiles!products_created_by_fkey(full_name)`)
-      .eq('workspace_id', workspaceId)
-      .order('name')
-    if (!error) set({ products: data || [] })
-    set({ loading: false })
-    return { error }
+    try {
+      const { data, error } = await supabase
+        .from('products')
+        .select(`*, categories(id, name, color, icon, aisle), profiles!products_created_by_fkey(full_name)`)
+        .eq('workspace_id', workspaceId)
+        .order('name')
+      if (!error) set({ products: data || [] })
+      return { error }
+    } finally {
+      set({ loading: false })
+    }
   },
 
   createProduct: async (workspaceId, product, userId) => {

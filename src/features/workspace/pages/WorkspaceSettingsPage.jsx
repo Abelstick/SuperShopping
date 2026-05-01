@@ -10,6 +10,7 @@ import { People, PersonAdd, MoreVert, Delete, Email, Settings } from '@mui/icons
 import { useSnackbar } from 'notistack'
 import { useAuthStore } from '@/features/auth/store/authStore'
 import { useWorkspaceStore } from '../store/workspaceStore'
+import { useAppStore } from '@/store/appStore'
 
 const ROLE_LABELS = { owner: 'Propietario', editor: 'Editor', viewer: 'Lector' }
 const ROLE_COLORS = { owner: 'primary', editor: 'success', viewer: 'default' }
@@ -58,6 +59,7 @@ function MemberItem({ member, isOwner, currentUserId, onRoleChange, onRemove }) 
 export default function WorkspaceSettingsPage() {
   const { user } = useAuthStore()
   const { currentWorkspace, members, invitations, fetchMembers, fetchInvitations, updateMemberRole, removeMember, inviteMember, updateWorkspace } = useWorkspaceStore()
+  const { refreshSignal } = useAppStore()
   const { enqueueSnackbar } = useSnackbar()
   const [tab, setTab] = useState(0)
   const [inviteDialog, setInviteDialog] = useState(false)
@@ -74,7 +76,7 @@ export default function WorkspaceSettingsPage() {
       fetchInvitations(currentWorkspace.id)
       setWsForm({ name: currentWorkspace.name, description: currentWorkspace.description || '' })
     }
-  }, [currentWorkspace?.id])
+  }, [currentWorkspace?.id, refreshSignal])
 
   const handleInvite = async () => {
     setSaving(true)
