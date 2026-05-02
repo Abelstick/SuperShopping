@@ -50,12 +50,14 @@ function ItemRow({ item, isEditor, onEdit, onDelete, onToggle, multiplyByQty }) 
         )
       }
     >
-      <IconButton size="small" onClick={onToggle} sx={{ mr: 1, flexShrink: 0 }}>
-        {item.is_checked
-          ? <CheckCircle sx={{ color: 'success.main', fontSize: 20 }} />
-          : <RadioButtonUnchecked sx={{ color: 'text.disabled', fontSize: 20 }} />
-        }
-      </IconButton>
+      <Tooltip title={item.is_checked ? 'Desmarcar' : 'Marcar como completado'} placement="left">
+        <IconButton size="small" onClick={onToggle} sx={{ mr: 1, flexShrink: 0 }}>
+          {item.is_checked
+            ? <CheckCircle sx={{ color: 'success.main', fontSize: 20 }} />
+            : <RadioButtonUnchecked sx={{ color: 'text.disabled', fontSize: 20 }} />
+          }
+        </IconButton>
+      </Tooltip>
       <ListItemText
         primary={
           <Typography variant="body2" fontWeight={600} sx={{ textDecoration: item.is_checked ? 'line-through' : 'none' }}>

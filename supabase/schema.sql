@@ -472,6 +472,7 @@ CREATE TABLE IF NOT EXISTS purchase_items (
   category_id UUID REFERENCES categories(id) ON DELETE SET NULL,
   purchased_by UUID REFERENCES profiles(id),
   notes TEXT,
+  is_household BOOLEAN DEFAULT true NOT NULL,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

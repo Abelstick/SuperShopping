@@ -154,6 +154,10 @@ export const useInventoryStore = create((set, get) => ({
     return products.filter((p) => {
       if (filters.status === 'active' && !p.is_active) return false
       if (filters.status === 'inactive' && p.is_active) return false
+      if (filters.status === 'low_stock') {
+        if (!p.is_active) return false
+        if (!(p.current_quantity <= p.min_quantity && p.min_quantity > 0)) return false
+      }
       if (filters.categoryId && p.category_id !== filters.categoryId) return false
       if (filters.search) {
         const q = filters.search.toLowerCase()

@@ -2,17 +2,15 @@ import { useEffect, useState } from 'react'
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import {
-  Box, Typography, Card, CardContent, List, ListItem,
+  Box, Typography, Card, CardContent, List,
   IconButton, Chip, Avatar, AvatarGroup, Button, Divider,
   Dialog, DialogTitle, DialogContent, DialogActions, TextField,
-  Grid, LinearProgress, Tooltip, Fab, Alert, CircularProgress,
-  Stack, Badge, Collapse, alpha, useTheme, Checkbox, FormControlLabel,
+  Grid, LinearProgress, Tooltip, Fab, CircularProgress,
+  Stack, Collapse, alpha, useTheme, Checkbox, FormControlLabel, Switch,
 } from '@mui/material'
 import {
   ShoppingCart, Lock, LockOpen, Add, CheckCircle,
-  People, AttachMoney, ArrowBack, Done, Warning,
-  Delete, Person, Inventory2, ExpandMore, ExpandLess,
-  RadioButtonUnchecked, Store,
+  ArrowBack, Done, Delete, ExpandMore, ExpandLess, Store, Edit,
 } from '@mui/icons-material'
 import { useSnackbar } from 'notistack'
 import { useAuthStore } from '@/features/auth/store/authStore'
@@ -25,9 +23,12 @@ import { usePurchaseStore } from '@/features/purchases/store/purchaseStore'
 function AddItemDialog({ open, budgetItem, sessionId, purchaseId, userId, workspaceId, onClose }) {
   const { addPurchaseItem, unlockItem } = useShoppingStore()
   const { enqueueSnackbar } = useSnackbar()
-  const [form, setForm] = useState({ product_name: '', brand: '', quantity: 1, unit_price: '', unit: 'unidad' })
+  const [form, setForm] = useState({
+    product_name: '', brand: '', quantity: 1, unit_price: '', unit: 'unidad', is_household: true,
+  })
   const [saving, setSaving] = useState(false)
   const [multiplyQty, setMultiplyQty] = useState(false)
+  const [priceHint, setPriceHint] = useState(null)
 
   useEffect(() => {
     if (open) {
@@ -37,14 +38,38 @@ function AddItemDialog({ open, budgetItem, sessionId, purchaseId, userId, worksp
         quantity: budgetItem?.quantity ?? 1,
         unit_price: budgetItem?.estimated_price ?? '',
         unit: budgetItem?.unit ?? 'unidad',
+        is_household: true,
       })
       setMultiplyQty(false)
+      setPriceHint(null)
     }
   }, [open, budgetItem])
+
+  // Fetch historical prices for this product
+  useEffect(() => {
+    if (!open || !budgetItem?.product_id) { setPriceHint(null); return }
+    supabase
+      .from('purchase_items')
+      .select('unit_price')
+      .eq('product_id', budgetItem.product_id)
+      .not('unit_price', 'is', null)
+      .order('created_at', { ascending: false })
+      .limit(10)
+      .then(({ data }) => {
+        if (!data || data.length === 0) { setPriceHint(null); return }
+        const prices = data.map((d) => Number(d.unit_price))
+        const avg = prices.reduce((a, b) => a + b, 0) / prices.length
+        setPriceHint({ avg, count: prices.length, min: Math.min(...prices), max: Math.max(...prices) })
+      })
+  }, [open, budgetItem?.product_id])
 
   const total = multiplyQty
     ? Number(form.quantity || 0) * Number(form.unit_price || 0)
     : Number(form.unit_price || 0)
+
+  const priceDiff = priceHint && form.unit_price
+    ? ((Number(form.unit_price) - priceHint.avg) / priceHint.avg) * 100
+    : null
 
   const handleSave = async () => {
     if (!form.product_name.trim()) return
@@ -61,6 +86,7 @@ function AddItemDialog({ open, budgetItem, sessionId, purchaseId, userId, worksp
         budget_item_id: budgetItem?.id ?? null,
         product_id: budgetItem?.product_id ?? null,
         category_id: budgetItem?.category_id ?? null,
+        is_household: form.is_household,
       },
       userId,
       workspaceId,
@@ -86,11 +112,150 @@ function AddItemDialog({ open, budgetItem, sessionId, purchaseId, userId, worksp
       </DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 1 }}>
-          <TextField fullWidth label="Producto *" value={form.product_name} onChange={(e) => setForm((f) => ({ ...f, product_name: e.target.value }))} size="medium" autoFocus={!budgetItem} />
-          <TextField fullWidth label="Marca (opcional)" value={form.brand} onChange={(e) => setForm((f) => ({ ...f, brand: e.target.value }))} />
+          <TextField
+            fullWidth label="Producto *" value={form.product_name}
+            onChange={(e) => setForm((f) => ({ ...f, product_name: e.target.value }))}
+            size="medium" autoFocus={!budgetItem}
+          />
+          <TextField
+            fullWidth label="Marca (opcional)" value={form.brand}
+            onChange={(e) => setForm((f) => ({ ...f, brand: e.target.value }))}
+          />
           <Grid container spacing={1.5}>
             <Grid size={{ xs: 5 }}>
-              <TextField fullWidth type="number" label="Cant." value={form.quantity} onChange={(e) => setForm((f) => ({ ...f, quantity: e.target.value }))} slotProps={{ htmlInput: { min: 0.01, step: 0.01 } }} />
+              <TextField
+                fullWidth type="number" label="Cant." value={form.quantity}
+                onChange={(e) => setForm((f) => ({ ...f, quantity: e.target.value }))}
+                slotProps={{ htmlInput: { min: 0.01, step: 0.01 } }}
+              />
+            </Grid>
+            <Grid size={{ xs: 7 }}>
+              <TextField
+                fullWidth type="number" label="Precio"
+                value={form.unit_price}
+                onChange={(e) => setForm((f) => ({ ...f, unit_price: e.target.value }))}
+                slotProps={{ input: { startAdornment: <Box component="span" sx={{ mr: 0.5, color: 'text.secondary', fontSize: 14 }}>S/</Box> } }}
+              />
+            </Grid>
+          </Grid>
+
+          {/* Price history hint */}
+          {priceHint && form.unit_price && (
+            <Box sx={{ mt: -1 }}>
+              <Typography
+                variant="caption"
+                color={priceDiff > 15 ? 'error.main' : priceDiff < -15 ? 'success.main' : 'text.secondary'}
+              >
+                Historial ({priceHint.count} compras): S/{priceHint.avg.toFixed(2)}
+                {priceDiff !== null && ` · ${priceDiff > 0 ? '+' : ''}${Math.round(priceDiff)}% vs. habitual`}
+              </Typography>
+            </Box>
+          )}
+
+          <FormControlLabel
+            control={<Checkbox size="small" checked={multiplyQty} onChange={(e) => setMultiplyQty(e.target.checked)} />}
+            label={<Typography variant="caption" color="text.secondary">Multiplicar por cantidad</Typography>}
+            sx={{ m: 0 }}
+          />
+          {total > 0 && (
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', p: 1.5, bgcolor: 'action.hover', borderRadius: 2 }}>
+              <Typography variant="body2" color="text.secondary">{multiplyQty ? 'Subtotal' : 'Total'}</Typography>
+              <Typography variant="h6" fontWeight={700} color="primary">S/{total.toFixed(2)}</Typography>
+            </Box>
+          )}
+
+          {/* Household classification */}
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 0.5, py: 0.5, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+            <Box>
+              <Typography variant="body2" fontWeight={500}>Gasto del hogar</Typography>
+              <Typography variant="caption" color="text.secondary">Desactiva para regalos o gastos excepcionales</Typography>
+            </Box>
+            <Switch
+              size="small"
+              checked={form.is_household}
+              onChange={(e) => setForm((f) => ({ ...f, is_household: e.target.checked }))}
+            />
+          </Box>
+        </Stack>
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 3 }}>
+        <Button onClick={onClose} color="inherit">Cancelar</Button>
+        <Button variant="contained" onClick={handleSave} disabled={saving || !form.product_name.trim()} fullWidth>
+          {saving ? 'Guardando…' : 'Agregar al carrito'}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  )
+}
+
+// ── Edit Purchased Item Dialog ───────────────────────────────────────────────
+function EditPurchasedItemDialog({ open, item, onClose }) {
+  const { updatePurchaseItem } = useShoppingStore()
+  const { enqueueSnackbar } = useSnackbar()
+  const [form, setForm] = useState({ product_name: '', brand: '', quantity: 1, unit_price: '', unit: 'unidad' })
+  const [multiplyQty, setMultiplyQty] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    if (open && item) {
+      const guessMultiply = item.unit_price && item.total_price &&
+        Math.abs(item.total_price - item.unit_price * item.quantity) < 0.01 &&
+        item.quantity !== 1
+      setMultiplyQty(Boolean(guessMultiply))
+      setForm({
+        product_name: item.product_name || '',
+        brand: item.brand || '',
+        quantity: item.quantity || 1,
+        unit_price: item.unit_price ?? '',
+        unit: item.unit || 'unidad',
+      })
+    }
+  }, [open, item])
+
+  const total = multiplyQty
+    ? Number(form.quantity || 0) * Number(form.unit_price || 0)
+    : Number(form.unit_price || 0)
+
+  const handleSave = async () => {
+    if (!form.product_name.trim()) return
+    setSaving(true)
+    const { error } = await updatePurchaseItem(item.id, {
+      product_name: form.product_name.trim(),
+      brand: form.brand.trim() || null,
+      quantity: Number(form.quantity),
+      unit_price: form.unit_price ? Number(form.unit_price) : null,
+      total_price: total || null,
+      unit: form.unit,
+    })
+    setSaving(false)
+    if (error) { enqueueSnackbar('Error al actualizar el producto', { variant: 'error' }); return }
+    enqueueSnackbar('Producto actualizado', { variant: 'success' })
+    onClose()
+  }
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth slotProps={{ paper: { sx: { borderRadius: 3 } } }}>
+      <DialogTitle sx={{ pb: 1 }}>
+        <Typography variant="h6" fontWeight={700}>Editar producto</Typography>
+      </DialogTitle>
+      <DialogContent>
+        <Stack spacing={2} sx={{ mt: 1 }}>
+          <TextField
+            fullWidth label="Producto *" value={form.product_name}
+            onChange={(e) => setForm((f) => ({ ...f, product_name: e.target.value }))}
+            autoFocus
+          />
+          <TextField
+            fullWidth label="Marca (opcional)" value={form.brand}
+            onChange={(e) => setForm((f) => ({ ...f, brand: e.target.value }))}
+          />
+          <Grid container spacing={1.5}>
+            <Grid size={{ xs: 5 }}>
+              <TextField
+                fullWidth type="number" label="Cant." value={form.quantity}
+                onChange={(e) => setForm((f) => ({ ...f, quantity: e.target.value }))}
+                slotProps={{ htmlInput: { min: 0.01, step: 0.01 } }}
+              />
             </Grid>
             <Grid size={{ xs: 7 }}>
               <TextField
@@ -117,7 +282,7 @@ function AddItemDialog({ open, budgetItem, sessionId, purchaseId, userId, worksp
       <DialogActions sx={{ px: 3, pb: 3 }}>
         <Button onClick={onClose} color="inherit">Cancelar</Button>
         <Button variant="contained" onClick={handleSave} disabled={saving || !form.product_name.trim()} fullWidth>
-          {saving ? 'Guardando…' : 'Agregar al carrito'}
+          {saving ? 'Guardando…' : 'Guardar cambios'}
         </Button>
       </DialogActions>
     </Dialog>
@@ -154,7 +319,6 @@ function BudgetItemCard({ item, lock, isLockedByMe, sessionId, purchaseId, userI
           ? 'warning.main'
           : 'divider',
         transition: 'all 0.2s ease',
-        opacity: 1,
         '&:hover': { boxShadow: 4 },
       }}
     >
@@ -235,23 +399,16 @@ function BudgetItemCard({ item, lock, isLockedByMe, sessionId, purchaseId, userI
 }
 
 // ── Purchased Item Row ───────────────────────────────────────────────────────
-function PurchasedItemRow({ item, onRemove }) {
+function PurchasedItemRow({ item, onRemove, onEdit }) {
   return (
-    <ListItem
-      sx={{ px: 2, py: 1 }}
-      secondaryAction={
-        <IconButton size="small" onClick={() => onRemove(item.id)} sx={{ opacity: 0.5, '&:hover': { opacity: 1, color: 'error.main' } }}>
-          <Delete fontSize="small" />
-        </IconButton>
-      }
-    >
-      <CheckCircle color="success" sx={{ mr: 1.5, fontSize: 20, flexShrink: 0 }} />
+    <Box sx={{ px: 2, py: 1, display: 'flex', alignItems: 'center', gap: 1.5 }}>
+      <CheckCircle color="success" sx={{ fontSize: 20, flexShrink: 0 }} />
       <Box sx={{ flexGrow: 1, minWidth: 0 }}>
         <Typography variant="body2" fontWeight={600} noWrap>
           {item.product_name}
           {item.brand && <Box component="span" sx={{ color: 'text.secondary', fontWeight: 400 }}> · {item.brand}</Box>}
         </Typography>
-        <Stack direction="row" spacing={1} alignItems="center">
+        <Stack direction="row" spacing={0.75} alignItems="center" flexWrap="wrap">
           <Typography variant="caption" color="text.secondary">
             {item.quantity} {item.unit}
           </Typography>
@@ -260,14 +417,32 @@ function PurchasedItemRow({ item, onRemove }) {
               · {item.profiles.full_name}
             </Typography>
           )}
+          {item.is_household === false && (
+            <Chip
+              size="small" label="No hogar"
+              sx={{ height: 16, fontSize: '0.6rem', bgcolor: 'action.hover', color: 'text.secondary' }}
+            />
+          )}
         </Stack>
       </Box>
       {item.total_price != null && (
-        <Typography variant="subtitle2" fontWeight={700} color="success.main" sx={{ ml: 1 }}>
+        <Typography variant="subtitle2" fontWeight={700} color="success.main" sx={{ flexShrink: 0 }}>
           S/{item.total_price.toFixed(2)}
         </Typography>
       )}
-    </ListItem>
+      <Box sx={{ display: 'flex', flexShrink: 0, gap: 0.25 }}>
+        <Tooltip title="Editar">
+          <IconButton size="small" onClick={() => onEdit(item)} sx={{ opacity: 0.5, '&:hover': { opacity: 1 } }}>
+            <Edit fontSize="small" />
+          </IconButton>
+        </Tooltip>
+        <Tooltip title="Eliminar">
+          <IconButton size="small" onClick={() => onRemove(item.id)} sx={{ opacity: 0.5, '&:hover': { opacity: 1, color: 'error.main' } }}>
+            <Delete fontSize="small" />
+          </IconButton>
+        </Tooltip>
+      </Box>
+    </Box>
   )
 }
 
@@ -286,20 +461,20 @@ export default function ShoppingModePage() {
     session, participants, locks, purchaseItems,
     loading, startSession, fetchSession, completeSession,
     getTotals, getLockForItem, removePurchaseItem, unsubscribe,
+    updatePurchaseItem,
   } = useShoppingStore()
-  const { createPurchase } = usePurchaseStore()
+  const { createPurchase, updatePurchase } = usePurchaseStore()
   const { enqueueSnackbar } = useSnackbar()
 
   const [purchase, setPurchase] = useState(null)
   const [addItemDialog, setAddItemDialog] = useState({ open: false, item: null })
+  const [editItemDialog, setEditItemDialog] = useState({ open: false, item: null })
   const [completing, setCompleting] = useState(false)
   const [initialized, setInitialized] = useState(false)
   const [showBought, setShowBought] = useState(false)
+  const [exitConfirm, setExitConfirm] = useState(false)
 
   useEffect(() => {
-    // Helper: find or create the purchase record linked to a session.
-    // Using session_id as the idempotency key avoids duplicates on StrictMode
-    // double-invocations or component remounts after navigation.
     const resolveSessionPurchase = async (sessId, workspaceId, budgetIdRef) => {
       const { data: existing } = await supabase
         .from('purchases')
@@ -325,9 +500,7 @@ export default function ShoppingModePage() {
 
     const init = async () => {
       if (sessionId) {
-        // Resuming an existing session (component remounted after navigate)
         await fetchSession(sessionId, user.id)
-        // Recover the purchase that was already created for this session
         const { data: purch } = await supabase
           .from('purchases')
           .select('id, name, total_amount')
@@ -369,9 +542,13 @@ export default function ShoppingModePage() {
     if (!session) return
     setCompleting(true)
 
+    // Persist the final total on the purchase record before marking as completed
+    if (purchase?.id) {
+      await updatePurchase(purchase.id, { total_amount: totalSpent })
+    }
+
     const [{ error: sessErr }] = await Promise.all([
       completeSession(session.id),
-      // Mark the linked budget as completed so it's clear in the UI
       session.budget_id
         ? updateBudget(session.budget_id, { status: 'completed' })
         : Promise.resolve(),
@@ -413,7 +590,7 @@ export default function ShoppingModePage() {
       >
         {/* Title row */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
-          <IconButton size="small" onClick={() => navigate('/budgets')} sx={{ mr: 0.5 }}>
+          <IconButton size="small" onClick={() => setExitConfirm(true)} sx={{ mr: 0.5 }}>
             <ArrowBack fontSize="small" />
           </IconButton>
           <Box sx={{ flexGrow: 1, minWidth: 0 }}>
@@ -490,7 +667,11 @@ export default function ShoppingModePage() {
               <List disablePadding>
                 {purchaseItems.map((pi, i) => (
                   <Box key={pi.id}>
-                    <PurchasedItemRow item={pi} onRemove={removePurchaseItem} />
+                    <PurchasedItemRow
+                      item={pi}
+                      onRemove={removePurchaseItem}
+                      onEdit={(item) => setEditItemDialog({ open: true, item })}
+                    />
                     {i < purchaseItems.length - 1 && <Divider component="li" />}
                   </Box>
                 ))}
@@ -556,7 +737,7 @@ export default function ShoppingModePage() {
       <Fab
         color="primary"
         size="medium"
-        sx={{ position: 'fixed', bottom: 88, right: 20, boxShadow: '0 4px 20px rgba(37,99,235,0.45)' }}
+        sx={{ position: 'fixed', bottom: { xs: 144, md: 88 }, right: 20, boxShadow: '0 4px 20px rgba(37,99,235,0.45)' }}
         onClick={() => setAddItemDialog({ open: true, item: null })}
       >
         <Add />
@@ -565,11 +746,12 @@ export default function ShoppingModePage() {
       {/* ── Bottom bar – complete ── */}
       <Box
         sx={{
-          position: 'fixed', bottom: 0, left: 0, right: 0,
+          position: 'fixed', bottom: { xs: 56, md: 0 }, left: 0, right: 0,
           p: 2, pt: 1.5,
           bgcolor: 'background.default',
           borderTop: '1px solid', borderColor: 'divider',
           backdropFilter: 'blur(12px)',
+          zIndex: 15,
         }}
       >
         <Button
@@ -583,6 +765,20 @@ export default function ShoppingModePage() {
         </Button>
       </Box>
 
+      {/* ── Exit confirmation dialog ── */}
+      <Dialog open={exitConfirm} onClose={() => setExitConfirm(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>¿Salir del modo compra?</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary">
+            La sesión quedará activa y podrás retomarla desde el presupuesto. Los productos que ya agregaste no se perderán.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setExitConfirm(false)} variant="contained">Seguir comprando</Button>
+          <Button onClick={() => navigate('/budgets')} color="inherit">Salir</Button>
+        </DialogActions>
+      </Dialog>
+
       <AddItemDialog
         open={addItemDialog.open}
         budgetItem={addItemDialog.item}
@@ -591,6 +787,12 @@ export default function ShoppingModePage() {
         userId={user?.id}
         workspaceId={currentWorkspace?.id}
         onClose={() => setAddItemDialog({ open: false, item: null })}
+      />
+
+      <EditPurchasedItemDialog
+        open={editItemDialog.open}
+        item={editItemDialog.item}
+        onClose={() => setEditItemDialog({ open: false, item: null })}
       />
     </Box>
   )

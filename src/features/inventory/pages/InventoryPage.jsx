@@ -20,6 +20,18 @@ import ProductForm from '../components/ProductForm'
 import CategoryManager from '../components/CategoryManager'
 import ProductHistoryDrawer from '../components/ProductHistoryDrawer'
 
+function relativeTime(dateStr) {
+  if (!dateStr) return null
+  const diff = Date.now() - new Date(dateStr).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 60) return `hace ${mins}min`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `hace ${hrs}h`
+  const days = Math.floor(hrs / 24)
+  if (days < 30) return `hace ${days}d`
+  return new Date(dateStr).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })
+}
+
 // ── Product Card ─────────────────────────────────────────────────────────────
 function ProductCard({ product, isEditor, onEdit, onDeactivate, onDelete, onHistory }) {
   const [anchorEl, setAnchorEl] = useState(null)
@@ -109,6 +121,11 @@ function ProductCard({ product, isEditor, onEdit, onDeactivate, onDelete, onHist
               ⚠ Bajo mínimo ({product.min_quantity} {product.unit})
             </Typography>
           )}
+          {product.updated_at && (
+            <Typography variant="caption" color="text.disabled" sx={{ mt: 0.75, display: 'block' }}>
+              Actualizado {relativeTime(product.updated_at)}
+            </Typography>
+          )}
         </Box>
       </Box>
     </Card>
@@ -137,6 +154,11 @@ function ProductRow({ product, isEditor, divider, onEdit, onDeactivate, onDelete
             <Typography component="span" variant="caption" color="text.secondary">{product.unit}</Typography>
           </Typography>
           {isLow && <Typography variant="caption" color="error.main" display="block">Bajo stock</Typography>}
+          {product.updated_at && (
+            <Typography variant="caption" color="text.disabled" display="block">
+              {relativeTime(product.updated_at)}
+            </Typography>
+          )}
         </Box>
         {isEditor && (
           <>
@@ -308,6 +330,7 @@ export default function InventoryPage() {
                 <MenuItem value="all">Todos</MenuItem>
                 <MenuItem value="active">Activos</MenuItem>
                 <MenuItem value="inactive">Inactivos</MenuItem>
+                <MenuItem value="low_stock">⚠ Stock bajo</MenuItem>
               </Select>
             </FormControl>
             <ToggleButtonGroup value={view} exclusive onChange={(_, v) => v && setView(v)} size="small" sx={{ ml: 'auto' }}>
