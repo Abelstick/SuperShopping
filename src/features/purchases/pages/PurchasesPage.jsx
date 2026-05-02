@@ -95,9 +95,15 @@ function PurchaseRow({ purchase, isOwner, onView, onDelete }) {
       </Box>
 
       <Box sx={{ textAlign: 'right', flexShrink: 0 }}>
-        <Typography variant="subtitle2" fontWeight={800} color="primary.main">
-          S/{(purchase.total_amount || 0).toFixed(2)}
-        </Typography>
+        {purchase.total_amount > 0 ? (
+          <Typography variant="subtitle2" fontWeight={800} color="primary.main">
+            S/{purchase.total_amount.toFixed(2)}
+          </Typography>
+        ) : (
+          <Typography variant="caption" color="warning.main" fontWeight={600}>
+            Ver detalle
+          </Typography>
+        )}
       </Box>
 
       <Box sx={{ display: 'flex', gap: 0.25, flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>

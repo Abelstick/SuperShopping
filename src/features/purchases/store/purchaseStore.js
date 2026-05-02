@@ -75,6 +75,23 @@ export const usePurchaseStore = create((set, get) => ({
     return { error }
   },
 
+  updatePurchaseItem: async (id, updates) => {
+    const { data, error } = await supabase
+      .from('purchase_items')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single()
+    if (!error && data) set((s) => ({ purchaseItems: s.purchaseItems.map((i) => i.id === id ? { ...i, ...data } : i) }))
+    return { data, error }
+  },
+
+  deletePurchaseItem: async (id) => {
+    const { error } = await supabase.from('purchase_items').delete().eq('id', id)
+    if (!error) set((s) => ({ purchaseItems: s.purchaseItems.filter((i) => i.id !== id) }))
+    return { error }
+  },
+
   getSpendingByUser: () => {
     const { purchases } = get()
     const byUser = {}

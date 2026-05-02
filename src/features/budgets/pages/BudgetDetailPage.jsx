@@ -8,9 +8,8 @@ import {
   Skeleton, InputAdornment, Menu, Tooltip, Switch, FormControlLabel,
 } from '@mui/material'
 import {
-  ArrowBack, Add, Edit, Delete, ShoppingCart, CheckCircle,
-  RadioButtonUnchecked, Close, ShoppingBag, Tune, DeleteForever,
-  DoneAll, RemoveDone,
+  ArrowBack, Add, Edit, Delete, ShoppingCart,
+  Close, ShoppingBag, Tune, DeleteForever,
 } from '@mui/icons-material'
 import { useSnackbar } from 'notistack'
 import { useAuthStore } from '@/features/auth/store/authStore'
@@ -30,17 +29,13 @@ function SectionLabel({ children }) {
 }
 
 // ── Item row ─────────────────────────────────────────────────────────────────
-function ItemRow({ item, isEditor, onEdit, onDelete, onToggle, multiplyByQty }) {
+function ItemRow({ item, isEditor, onEdit, onDelete, multiplyByQty }) {
   const estimated = multiplyByQty ? item.quantity * (item.estimated_price || 0) : (item.estimated_price || 0)
   const catColor = item.categories?.color
 
   return (
     <ListItem
-      sx={{
-        px: 2, py: 1.25,
-        opacity: item.is_checked ? 0.6 : 1,
-        transition: 'opacity 0.15s',
-      }}
+      sx={{ px: 2, py: 1.25 }}
       secondaryAction={
         isEditor && (
           <Box sx={{ display: 'flex', gap: 0.25 }}>
@@ -50,17 +45,9 @@ function ItemRow({ item, isEditor, onEdit, onDelete, onToggle, multiplyByQty }) 
         )
       }
     >
-      <Tooltip title={item.is_checked ? 'Desmarcar' : 'Marcar como completado'} placement="left">
-        <IconButton size="small" onClick={onToggle} sx={{ mr: 1, flexShrink: 0 }}>
-          {item.is_checked
-            ? <CheckCircle sx={{ color: 'success.main', fontSize: 20 }} />
-            : <RadioButtonUnchecked sx={{ color: 'text.disabled', fontSize: 20 }} />
-          }
-        </IconButton>
-      </Tooltip>
       <ListItemText
         primary={
-          <Typography variant="body2" fontWeight={600} sx={{ textDecoration: item.is_checked ? 'line-through' : 'none' }}>
+          <Typography variant="body2" fontWeight={600}>
             {item.product_name}
           </Typography>
         }
@@ -291,14 +278,13 @@ export default function BudgetDetailPage() {
   const {
     currentBudget, budgetItems, loading,
     fetchBudgetWithItems, updateBudgetItem, deleteBudgetItem,
-    checkAllItems, uncheckAllItems, clearCheckedItems, clearAllItems,
+    clearAllItems,
   } = useBudgetStore()
   const { products, categories, fetchProducts, fetchCategories } = useInventoryStore()
   const { enqueueSnackbar } = useSnackbar()
   const [itemDialog, setItemDialog] = useState({ open: false, item: null })
   const [deleteConfirm, setDeleteConfirm] = useState(null)
   const [maintenanceAnchor, setMaintenanceAnchor] = useState(null)
-  const [clearCheckedConfirm, setClearCheckedConfirm] = useState(false)
   const [clearAllConfirm, setClearAllConfirm] = useState(false)
   const [bulkLoading, setBulkLoading] = useState(false)
   const [multiplyByQty, setMultiplyByQty] = useState(false)
@@ -311,35 +297,17 @@ export default function BudgetDetailPage() {
     }
   }, [budgetId])
 
-  const checked   = budgetItems.filter((i) => i.is_checked)
-  const unchecked = budgetItems.filter((i) => !i.is_checked)
+  const totalEst = multiplyByQty
+    ? budgetItems.reduce((a, i) => a + (i.quantity * (i.estimated_price || 0)), 0)
+    : budgetItems.reduce((a, i) => a + (i.estimated_price || 0), 0)
 
-  const handleCheckAll = async () => {
-    setMaintenanceAnchor(null)
-    setBulkLoading(true)
-    const { error } = await checkAllItems(budgetId)
-    setBulkLoading(false)
-    if (error) enqueueSnackbar('Error al actualizar', { variant: 'error' })
-    else enqueueSnackbar('Todos los items marcados', { variant: 'success' })
-  }
+  const overBudget = currentBudget?.target_amount && totalEst > currentBudget.target_amount
+  const budgetProgress = currentBudget?.target_amount
+    ? Math.min((totalEst / currentBudget.target_amount) * 100, 100)
+    : 0
 
-  const handleUncheckAll = async () => {
-    setMaintenanceAnchor(null)
-    setBulkLoading(true)
-    const { error } = await uncheckAllItems(budgetId)
-    setBulkLoading(false)
-    if (error) enqueueSnackbar('Error al actualizar', { variant: 'error' })
-    else enqueueSnackbar('Todos los items desmarcados', { variant: 'success' })
-  }
-
-  const handleClearChecked = async () => {
-    setClearCheckedConfirm(false)
-    setBulkLoading(true)
-    const { error } = await clearCheckedItems(budgetId)
-    setBulkLoading(false)
-    if (error) enqueueSnackbar('Error al limpiar', { variant: 'error' })
-    else enqueueSnackbar('Items completados eliminados', { variant: 'success' })
-  }
+  const isEditor = ['owner', 'editor'].includes(currentWorkspace?.my_role)
+  const statusMeta = STATUS_META[currentBudget?.status] || STATUS_META.draft
 
   const handleClearAll = async () => {
     setClearAllConfirm(false)
@@ -349,19 +317,6 @@ export default function BudgetDetailPage() {
     if (error) enqueueSnackbar('Error al vaciar', { variant: 'error' })
     else enqueueSnackbar('Lista vaciada', { variant: 'success' })
   }
-  const totalEst  = multiplyByQty
-    ? budgetItems.reduce((a, i) => a + (i.quantity * (i.estimated_price || 0)), 0)
-    : budgetItems.reduce((a, i) => a + (i.estimated_price || 0), 0)
-  const checkedEst = multiplyByQty
-    ? checked.reduce((a, i) => a + (i.quantity * (i.estimated_price || 0)), 0)
-    : checked.reduce((a, i) => a + (i.estimated_price || 0), 0)
-  const budgetProgress = currentBudget?.target_amount
-    ? Math.min((checkedEst / currentBudget.target_amount) * 100, 100)
-    : 0
-  const overBudget = currentBudget?.target_amount && checkedEst > currentBudget.target_amount
-
-  const isEditor = ['owner', 'editor'].includes(currentWorkspace?.my_role)
-  const statusMeta = STATUS_META[currentBudget?.status] || STATUS_META.draft
 
   if (loading && !currentBudget) {
     return (
@@ -423,12 +378,10 @@ export default function BudgetDetailPage() {
       {/* ── Summary cards ── */}
       <Grid container spacing={2} sx={{ mb: 3 }}>
         {[
-          { label: 'Items total',    value: budgetItems.length,       color: '#6366f1' },
-          { label: 'Completados',    value: checked.length,           color: '#10b981' },
-          { label: 'Est. total',     value: `S/${totalEst.toFixed(0)}`, color: '#71717a' },
-          { label: 'Est. completado', value: `S/${checkedEst.toFixed(0)}`, color: overBudget ? '#f43f5e' : '#f59e0b' },
+          { label: 'Items',      value: budgetItems.length,           color: '#6366f1' },
+          { label: 'Est. total', value: `S/${totalEst.toFixed(0)}`,   color: overBudget ? '#f43f5e' : '#71717a' },
         ].map((s) => (
-          <Grid size={{ xs: 6, sm: 3 }} key={s.label}>
+          <Grid size={{ xs: 6 }} key={s.label}>
             <Card sx={{ p: 2, textAlign: 'center' }}>
               <Typography variant="h5" fontWeight={800} sx={{ color: s.color, letterSpacing: '-0.02em' }}>
                 {s.value}
@@ -443,10 +396,10 @@ export default function BudgetDetailPage() {
       {currentBudget?.target_amount && (
         <Card sx={{ p: 2.5, mb: 3 }}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
-            <Typography variant="body2" fontWeight={600}>Progreso vs. presupuesto</Typography>
+            <Typography variant="body2" fontWeight={600}>Estimado vs. presupuesto</Typography>
             <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.5 }}>
               <Typography variant="subtitle2" fontWeight={800} color={overBudget ? 'error.main' : 'text.primary'}>
-                S/{checkedEst.toFixed(0)}
+                S/{totalEst.toFixed(0)}
               </Typography>
               <Typography variant="caption" color="text.secondary">/ S/{currentBudget.target_amount}</Typography>
             </Box>
@@ -459,7 +412,7 @@ export default function BudgetDetailPage() {
           />
           {overBudget && (
             <Typography variant="caption" color="error.main" fontWeight={600} sx={{ mt: 0.75, display: 'block' }}>
-              ⚠ Superaste el presupuesto por S/{(checkedEst - currentBudget.target_amount).toFixed(0)}
+              ⚠ El estimado supera el presupuesto por S/{(totalEst - currentBudget.target_amount).toFixed(0)}
             </Typography>
           )}
         </Card>
@@ -471,7 +424,7 @@ export default function BudgetDetailPage() {
           Lista de compras
           {budgetItems.length > 0 && (
             <Typography component="span" variant="body2" color="text.secondary" fontWeight={400} sx={{ ml: 1 }}>
-              {checked.length}/{budgetItems.length} completados
+              {budgetItems.length} items
             </Typography>
           )}
         </Typography>
@@ -484,66 +437,42 @@ export default function BudgetDetailPage() {
               sx={{ m: 0, gap: 0.5 }}
             />
           )}
-        {isEditor && (
-          <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-            {budgetItems.length > 0 && (
-              <>
-                <Tooltip title="Mantenimiento de lista">
-                  <IconButton
-                    size="small"
-                    onClick={(e) => setMaintenanceAnchor(e.currentTarget)}
-                    disabled={bulkLoading}
-                    sx={{ border: 1, borderColor: 'divider', borderRadius: 2 }}
+          {isEditor && (
+            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+              {budgetItems.length > 0 && (
+                <>
+                  <Tooltip title="Mantenimiento de lista">
+                    <IconButton
+                      size="small"
+                      onClick={(e) => setMaintenanceAnchor(e.currentTarget)}
+                      disabled={bulkLoading}
+                      sx={{ border: 1, borderColor: 'divider', borderRadius: 2 }}
+                    >
+                      <Tune sx={{ fontSize: 17 }} />
+                    </IconButton>
+                  </Tooltip>
+                  <Menu
+                    anchorEl={maintenanceAnchor}
+                    open={Boolean(maintenanceAnchor)}
+                    onClose={() => setMaintenanceAnchor(null)}
+                    transformOrigin={{ horizontal: 'right', vertical: 'top' }}
+                    anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
                   >
-                    <Tune sx={{ fontSize: 17 }} />
-                  </IconButton>
-                </Tooltip>
-                <Menu
-                  anchorEl={maintenanceAnchor}
-                  open={Boolean(maintenanceAnchor)}
-                  onClose={() => setMaintenanceAnchor(null)}
-                  transformOrigin={{ horizontal: 'right', vertical: 'top' }}
-                  anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
-                >
-                  <Box sx={{ px: 2, py: 1, pb: 0.5 }}>
-                    <Typography variant="overline" color="text.disabled" sx={{ fontSize: '0.6875rem' }}>
-                      ACCIONES MASIVAS
-                    </Typography>
-                  </Box>
-                  <MenuItem onClick={handleCheckAll} disabled={unchecked.length === 0}>
-                    <DoneAll sx={{ fontSize: 17, mr: 1.25, color: 'success.main' }} />
-                    Marcar todos como completados
-                  </MenuItem>
-                  <MenuItem onClick={handleUncheckAll} disabled={checked.length === 0}>
-                    <RemoveDone sx={{ fontSize: 17, mr: 1.25, color: 'text.secondary' }} />
-                    Desmarcar todos
-                  </MenuItem>
-                  <Divider sx={{ my: 0.5 }} />
-                  <MenuItem
-                    onClick={() => { setMaintenanceAnchor(null); setClearCheckedConfirm(true) }}
-                    disabled={checked.length === 0}
-                  >
-                    <Delete sx={{ fontSize: 17, mr: 1.25, color: 'warning.main' }} />
-                    Limpiar completados
-                    {checked.length > 0 && (
-                      <Chip size="small" label={checked.length} sx={{ ml: 'auto', height: 18, fontSize: '0.6875rem', bgcolor: 'rgba(245,158,11,0.12)', color: 'warning.main' }} />
-                    )}
-                  </MenuItem>
-                  <MenuItem
-                    onClick={() => { setMaintenanceAnchor(null); setClearAllConfirm(true) }}
-                    sx={{ color: 'error.main' }}
-                  >
-                    <DeleteForever sx={{ fontSize: 17, mr: 1.25 }} />
-                    Vaciar lista completa
-                  </MenuItem>
-                </Menu>
-              </>
-            )}
-            <Button startIcon={<Add />} size="small" variant="outlined" onClick={() => setItemDialog({ open: true, item: null })}>
-              Agregar
-            </Button>
-          </Box>
-        )}
+                    <MenuItem
+                      onClick={() => { setMaintenanceAnchor(null); setClearAllConfirm(true) }}
+                      sx={{ color: 'error.main' }}
+                    >
+                      <DeleteForever sx={{ fontSize: 17, mr: 1.25 }} />
+                      Vaciar lista completa
+                    </MenuItem>
+                  </Menu>
+                </>
+              )}
+              <Button startIcon={<Add />} size="small" variant="outlined" onClick={() => setItemDialog({ open: true, item: null })}>
+                Agregar
+              </Button>
+            </Box>
+          )}
         </Box>
       </Box>
 
@@ -563,42 +492,16 @@ export default function BudgetDetailPage() {
           </Box>
         ) : (
           <List disablePadding>
-            {/* Pending items */}
-            {unchecked.map((item, i) => (
+            {budgetItems.map((item, i) => (
               <Box key={item.id}>
                 <ItemRow
                   item={item}
                   isEditor={isEditor}
                   multiplyByQty={multiplyByQty}
-                  onToggle={() => updateBudgetItem(item.id, { is_checked: true })}
                   onEdit={() => setItemDialog({ open: true, item })}
                   onDelete={() => setDeleteConfirm(item)}
                 />
-                {(i < unchecked.length - 1 || checked.length > 0) && <Divider sx={{ mx: 2 }} />}
-              </Box>
-            ))}
-
-            {/* Divider for checked section */}
-            {checked.length > 0 && unchecked.length > 0 && (
-              <Box sx={{ px: 2, py: 1, bgcolor: 'action.hover' }}>
-                <Typography variant="caption" color="text.disabled" fontWeight={700}>
-                  COMPLETADOS ({checked.length})
-                </Typography>
-              </Box>
-            )}
-
-            {/* Checked items */}
-            {checked.map((item, i) => (
-              <Box key={item.id}>
-                <ItemRow
-                  item={item}
-                  isEditor={isEditor}
-                  multiplyByQty={multiplyByQty}
-                  onToggle={() => updateBudgetItem(item.id, { is_checked: false })}
-                  onEdit={() => setItemDialog({ open: true, item })}
-                  onDelete={() => setDeleteConfirm(item)}
-                />
-                {i < checked.length - 1 && <Divider sx={{ mx: 2 }} />}
+                {i < budgetItems.length - 1 && <Divider sx={{ mx: 2 }} />}
               </Box>
             ))}
           </List>
@@ -626,32 +529,6 @@ export default function BudgetDetailPage() {
           <Button onClick={() => setDeleteConfirm(null)}>Cancelar</Button>
           <Button variant="contained" color="error" onClick={async () => { await deleteBudgetItem(deleteConfirm.id); setDeleteConfirm(null) }}>
             Eliminar
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Clear checked items */}
-      <Dialog open={clearCheckedConfirm} onClose={() => setClearCheckedConfirm(false)} maxWidth="xs" fullWidth>
-        <DialogTitle sx={{ pb: 1 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-            <Box sx={{ p: 1, bgcolor: 'rgba(245,158,11,0.1)', borderRadius: 2, color: 'warning.main', display: 'flex' }}>
-              <Delete sx={{ fontSize: 20 }} />
-            </Box>
-            <Box>
-              <Typography variant="h6" fontWeight={700}>Limpiar completados</Typography>
-              <Typography variant="body2" color="text.secondary">{checked.length} item{checked.length !== 1 ? 's' : ''} se eliminarán</Typography>
-            </Box>
-          </Box>
-        </DialogTitle>
-        <DialogContent>
-          <Typography variant="body2" color="text.secondary">
-            Se eliminarán todos los items marcados como completados. Los items pendientes no se verán afectados.
-          </Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setClearCheckedConfirm(false)}>Cancelar</Button>
-          <Button variant="contained" color="warning" onClick={handleClearChecked}>
-            Limpiar completados
           </Button>
         </DialogActions>
       </Dialog>
