@@ -46,7 +46,7 @@ function BudgetCard({ budget, isEditor, onEdit, onDelete, onActivate, onDuplicat
       <Box sx={{ p: 2.5, flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
         {/* Header */}
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
-          <Box sx={{ flexGrow: 1, mr: 1 }}>
+          <Box sx={{ flexGrow: 1, minWidth: 0, mr: 1 }}>
             <Chip
               size="small"
               label={meta.label}

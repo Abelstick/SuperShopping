@@ -44,7 +44,7 @@ function ProductCard({ product, isEditor, onEdit, onDeactivate, onDelete, onHist
       <Box sx={{ height: 3, bgcolor: catColor, flexShrink: 0 }} />
       <Box sx={{ p: 2, flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1.5 }}>
-          <Box sx={{ flexGrow: 1, mr: 1 }}>
+          <Box sx={{ flexGrow: 1, minWidth: 0, mr: 1 }}>
             <Typography variant="subtitle2" fontWeight={700} noWrap>{product.name}</Typography>
             {product.categories && (
               <Chip
