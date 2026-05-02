@@ -3,7 +3,7 @@ import {
   Box, Dialog, DialogTitle, DialogContent, DialogActions, Button,
   TextField, Grid, Alert, Typography, InputAdornment, Divider, IconButton,
 } from '@mui/material'
-import { Receipt, Close, Store, CalendarToday, AttachMoney } from '@mui/icons-material'
+import { Receipt, Close, Store, CalendarToday } from '@mui/icons-material'
 import { useSnackbar } from 'notistack'
 import { useBudgetStore } from '../store/budgetStore'
 
@@ -128,7 +128,7 @@ export default function BudgetForm({ open, budget, workspaceId, userId, onClose 
             onChange={set('target_amount')}
             placeholder="0.00"
             helperText="Opcional. Se usará para calcular el progreso durante la compra."
-            slotProps={{ input: { startAdornment: <InputAdornment position="start"><AttachMoney sx={{ fontSize: 18, color: 'text.disabled' }} /></InputAdornment> }, htmlInput: { min: 0, step: 0.01 } }}
+            slotProps={{ input: { startAdornment: <InputAdornment position="start"><Box component="span" sx={{ color: 'text.disabled', fontSize: 13, fontWeight: 600 }}>S/</Box></InputAdornment> }, htmlInput: { min: 0, step: 0.01 } }}
           />
         </Box>
       </DialogContent>

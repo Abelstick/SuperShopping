@@ -6,7 +6,7 @@ import {
   IconButton, Chip, Avatar, AvatarGroup, Button, Divider,
   Dialog, DialogTitle, DialogContent, DialogActions, TextField,
   Grid, LinearProgress, Tooltip, Fab, Alert, CircularProgress,
-  Stack, Badge, Collapse, alpha, useTheme,
+  Stack, Badge, Collapse, alpha, useTheme, Checkbox, FormControlLabel,
 } from '@mui/material'
 import {
   ShoppingCart, Lock, LockOpen, Add, CheckCircle,
@@ -27,6 +27,7 @@ function AddItemDialog({ open, budgetItem, sessionId, purchaseId, userId, worksp
   const { enqueueSnackbar } = useSnackbar()
   const [form, setForm] = useState({ product_name: '', brand: '', quantity: 1, unit_price: '', unit: 'unidad' })
   const [saving, setSaving] = useState(false)
+  const [multiplyQty, setMultiplyQty] = useState(false)
 
   useEffect(() => {
     if (open) {
@@ -37,10 +38,13 @@ function AddItemDialog({ open, budgetItem, sessionId, purchaseId, userId, worksp
         unit_price: budgetItem?.estimated_price ?? '',
         unit: budgetItem?.unit ?? 'unidad',
       })
+      setMultiplyQty(false)
     }
   }, [open, budgetItem])
 
-  const total = Number(form.quantity || 0) * Number(form.unit_price || 0)
+  const total = multiplyQty
+    ? Number(form.quantity || 0) * Number(form.unit_price || 0)
+    : Number(form.unit_price || 0)
 
   const handleSave = async () => {
     if (!form.product_name.trim()) return
@@ -90,17 +94,22 @@ function AddItemDialog({ open, budgetItem, sessionId, purchaseId, userId, worksp
             </Grid>
             <Grid size={{ xs: 7 }}>
               <TextField
-                fullWidth type="number" label="Precio unitario"
+                fullWidth type="number" label="Precio"
                 value={form.unit_price}
                 onChange={(e) => setForm((f) => ({ ...f, unit_price: e.target.value }))}
-                slotProps={{ input: { startAdornment: <Box component="span" sx={{ mr: 0.5, color: 'text.secondary', fontSize: 14 }}>$</Box> } }}
+                slotProps={{ input: { startAdornment: <Box component="span" sx={{ mr: 0.5, color: 'text.secondary', fontSize: 14 }}>S/</Box> } }}
               />
             </Grid>
           </Grid>
+          <FormControlLabel
+            control={<Checkbox size="small" checked={multiplyQty} onChange={(e) => setMultiplyQty(e.target.checked)} />}
+            label={<Typography variant="caption" color="text.secondary">Multiplicar por cantidad</Typography>}
+            sx={{ m: 0 }}
+          />
           {total > 0 && (
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', p: 1.5, bgcolor: 'action.hover', borderRadius: 2 }}>
-              <Typography variant="body2" color="text.secondary">Subtotal</Typography>
-              <Typography variant="h6" fontWeight={700} color="primary">${total.toFixed(2)}</Typography>
+              <Typography variant="body2" color="text.secondary">{multiplyQty ? 'Subtotal' : 'Total'}</Typography>
+              <Typography variant="h6" fontWeight={700} color="primary">S/{total.toFixed(2)}</Typography>
             </Box>
           )}
         </Stack>
@@ -165,7 +174,7 @@ function BudgetItemCard({ item, lock, isLockedByMe, sessionId, purchaseId, userI
             <Stack direction="row" spacing={0.75} flexWrap="wrap" sx={{ mt: 0.5 }}>
               <Chip size="small" label={`${item.quantity} ${item.unit}`} variant="outlined" sx={{ height: 20, fontSize: 11 }} />
               {item.estimated_price && (
-                <Chip size="small" label={`~$${item.estimated_price}`} color="info" sx={{ height: 20, fontSize: 11 }} />
+                <Chip size="small" label={`~S/${item.estimated_price}`} color="info" sx={{ height: 20, fontSize: 11 }} />
               )}
               {item.categories && (
                 <Chip size="small" label={item.categories.name} sx={{ height: 20, fontSize: 11, bgcolor: alpha(item.categories.color, 0.15), color: item.categories.color, fontWeight: 600 }} />
@@ -255,7 +264,7 @@ function PurchasedItemRow({ item, onRemove }) {
       </Box>
       {item.total_price != null && (
         <Typography variant="subtitle2" fontWeight={700} color="success.main" sx={{ ml: 1 }}>
-          ${item.total_price.toFixed(2)}
+          S/{item.total_price.toFixed(2)}
         </Typography>
       )}
     </ListItem>
@@ -432,13 +441,13 @@ export default function ShoppingModePage() {
         {/* Totals */}
         <Box sx={{ display: 'flex', gap: 1.5, mb: 1 }}>
           <Box sx={{ flex: 1, textAlign: 'center', p: 1, borderRadius: 2, bgcolor: 'action.hover' }}>
-            <Typography variant="h6" fontWeight={800} color="primary.main">${totalSpent.toFixed(2)}</Typography>
+            <Typography variant="h6" fontWeight={800} color="primary.main">S/{totalSpent.toFixed(2)}</Typography>
             <Typography variant="caption" color="text.secondary">Gastado</Typography>
           </Box>
           {budget > 0 && (
             <Box sx={{ flex: 1, textAlign: 'center', p: 1, borderRadius: 2, bgcolor: overBudget ? alpha(theme.palette.error.main, 0.1) : 'action.hover' }}>
               <Typography variant="h6" fontWeight={800} color={overBudget ? 'error.main' : 'success.main'}>
-                {overBudget ? `-$${Math.abs(diff).toFixed(2)}` : `$${diff.toFixed(2)}`}
+                {overBudget ? `-S/${Math.abs(diff).toFixed(2)}` : `S/${diff.toFixed(2)}`}
               </Typography>
               <Typography variant="caption" color="text.secondary">{overBudget ? 'Excedido' : 'Disponible'}</Typography>
             </Box>
@@ -570,7 +579,7 @@ export default function ShoppingModePage() {
           disabled={completing || purchaseItems.length === 0}
           sx={{ py: 1.5, fontSize: '0.95rem' }}
         >
-          {completing ? 'Finalizando…' : `Finalizar compra · $${totalSpent.toFixed(2)}`}
+          {completing ? 'Finalizando…' : `Finalizar compra · S/${totalSpent.toFixed(2)}`}
         </Button>
       </Box>
 

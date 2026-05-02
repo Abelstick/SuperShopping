@@ -29,7 +29,7 @@ export default function PurchaseDetailPage() {
       <Grid container spacing={2} sx={{ mb: 2 }}>
         <Grid size={{ xs: 6, sm: 3 }}>
           <Card><CardContent sx={{ textAlign: 'center', py: 2 }}>
-            <Typography variant="h5" fontWeight={700} color="primary">${(currentPurchase?.total_amount || 0).toFixed(2)}</Typography>
+            <Typography variant="h5" fontWeight={700} color="primary">S/{(currentPurchase?.total_amount || 0).toFixed(2)}</Typography>
             <Typography variant="caption">Total gastado</Typography>
           </CardContent></Card>
         </Grid>
@@ -76,13 +76,13 @@ export default function PurchaseDetailPage() {
                       </Box>}
                       secondary={<Box sx={{ display: 'flex', gap: 1, mt: 0.5, flexWrap: 'wrap' }}>
                         <Chip size="small" label={`${item.quantity} ${item.unit}`} variant="outlined" />
-                        {item.unit_price && <Chip size="small" label={`$${item.unit_price} c/u`} variant="outlined" />}
+                        {item.unit_price && <Chip size="small" label={`S/${item.unit_price} c/u`} variant="outlined" />}
                         {item.categories && <Chip size="small" label={item.categories.name} sx={{ bgcolor: item.categories.color + '20' }} />}
                         <Typography variant="caption">{item.profiles?.full_name}</Typography>
                       </Box>}
                     />
                     <Typography variant="subtitle2" fontWeight={700} color="primary" sx={{ ml: 2, whiteSpace: 'nowrap' }}>
-                      ${(item.total_price || 0).toFixed(2)}
+                      S/{(item.total_price || 0).toFixed(2)}
                     </Typography>
                   </ListItem>
                   {i < purchaseItems.length - 1 && <Divider />}
@@ -91,7 +91,7 @@ export default function PurchaseDetailPage() {
               <Divider />
               <ListItem>
                 <ListItemText primary={<Typography fontWeight={700}>TOTAL</Typography>} />
-                <Typography variant="h6" fontWeight={700} color="primary">${(currentPurchase?.total_amount || 0).toFixed(2)}</Typography>
+                <Typography variant="h6" fontWeight={700} color="primary">S/{(currentPurchase?.total_amount || 0).toFixed(2)}</Typography>
               </ListItem>
             </List>
           )}

@@ -66,7 +66,7 @@ function ChartTooltip({ active, payload, label }) {
     <Box sx={{ bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 2, p: 1.5, boxShadow: theme.palette.mode === 'dark' ? '0 8px 24px rgba(0,0,0,0.5)' : '0 8px 24px rgba(0,0,0,0.1)' }}>
       <Typography variant="caption" color="text.secondary" display="block">{label}</Typography>
       <Typography variant="subtitle2" fontWeight={700}>
-        ${Number(payload[0].value).toLocaleString('es-AR', { maximumFractionDigits: 0 })}
+        S/{Number(payload[0].value).toLocaleString('es-AR', { maximumFractionDigits: 0 })}
       </Typography>
     </Box>
   )
@@ -78,7 +78,7 @@ function UserBar({ name, amount, max, color }) {
     <Box sx={{ mb: 2, '&:last-child': { mb: 0 } }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.75 }}>
         <Typography variant="body2" fontWeight={500}>{name}</Typography>
-        <Typography variant="body2" fontWeight={700}>${amount.toLocaleString('es-AR', { maximumFractionDigits: 0 })}</Typography>
+        <Typography variant="body2" fontWeight={700}>S/{amount.toLocaleString('es-AR', { maximumFractionDigits: 0 })}</Typography>
       </Box>
       <Box sx={{ height: 6, bgcolor: 'action.hover', borderRadius: 99, overflow: 'hidden' }}>
         <Box sx={{ height: '100%', width: `${pct}%`, background: `linear-gradient(90deg, ${color}88, ${color})`, borderRadius: 99, transition: 'width 0.6s ease' }} />
@@ -279,9 +279,9 @@ export default function DashboardPage() {
               : purchases.length > 0 ? { text: `${purchases.length} en total`, positive: false, negative: false } : null,
           },
           {
-            label: 'Total gastado', value: `$${totalSpent.toLocaleString('es-AR', { maximumFractionDigits: 0 })}`,
+            label: 'Total gastado', value: `S/${totalSpent.toLocaleString('es-AR', { maximumFractionDigits: 0 })}`,
             icon: <AttachMoney sx={{ fontSize: 18 }} />, accent: 'emerald',
-            sub: thisMonthSpend > 0 ? { text: `$${thisMonthSpend.toLocaleString('es-AR', { maximumFractionDigits: 0 })} este mes`, positive: false, negative: false } : null,
+            sub: thisMonthSpend > 0 ? { text: `S/${thisMonthSpend.toLocaleString('es-AR', { maximumFractionDigits: 0 })} este mes`, positive: false, negative: false } : null,
           },
         ].map(s => (
           <Grid size={{ xs: 6, sm: 3 }} key={s.label}>
@@ -308,7 +308,7 @@ export default function DashboardPage() {
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.divider} vertical={false} />
                     <XAxis dataKey="month" tick={{ fontSize: 10, fill: theme.palette.text.secondary }} tickLine={false} axisLine={false} />
-                    <YAxis tick={{ fontSize: 10, fill: theme.palette.text.secondary }} tickLine={false} axisLine={false} tickFormatter={v => `$${v}`} />
+                    <YAxis tick={{ fontSize: 10, fill: theme.palette.text.secondary }} tickLine={false} axisLine={false} tickFormatter={v => `S/${v}`} />
                     <RechartTooltip content={<ChartTooltip />} cursor={{ stroke: primaryColor, strokeWidth: 1, strokeDasharray: '4 4' }} />
                     <Area type="monotone" dataKey="total" stroke={primaryColor} strokeWidth={2} fill="url(#spendGrad)" dot={false}
                       activeDot={{ r: 4, fill: primaryColor, stroke: theme.palette.background.paper, strokeWidth: 2 }} />
@@ -360,7 +360,7 @@ export default function DashboardPage() {
               accent="emerald"
               loading={purchLoading}
               empty={avgMonthly === 0}
-              value={`$${Math.round(avgMonthly * 1.1).toLocaleString('es-AR')}`}
+              value={`S/${Math.round(avgMonthly * 1.1).toLocaleString('es-AR')}`}
               sub="Promedio + 10% buffer"
             />
           </Grid>
@@ -372,7 +372,7 @@ export default function DashboardPage() {
               loading={purchLoading}
               empty={spendTrend === null}
               value={spendTrend !== null ? `${spendTrend >= 0 ? '+' : ''}${spendTrend}%` : ''}
-              sub={spendTrend !== null ? `$${thisMonthSpend.toLocaleString('es-AR', { maximumFractionDigits: 0 })} vs $${lastMonthSpend.toLocaleString('es-AR', { maximumFractionDigits: 0 })} anterior` : null}
+              sub={spendTrend !== null ? `S/${thisMonthSpend.toLocaleString('es-AR', { maximumFractionDigits: 0 })} vs S/${lastMonthSpend.toLocaleString('es-AR', { maximumFractionDigits: 0 })} anterior` : null}
             />
           </Grid>
           <Grid size={{ xs: 6, sm: 6, md: 3 }}>
@@ -463,7 +463,7 @@ export default function DashboardPage() {
                         }
                       />
                       <Typography variant="body2" fontWeight={700} color="primary.main" sx={{ flexShrink: 0 }}>
-                        ${(p.total_amount || 0).toLocaleString('es-AR', { maximumFractionDigits: 0 })}
+                        S/{(p.total_amount || 0).toLocaleString('es-AR', { maximumFractionDigits: 0 })}
                       </Typography>
                     </ListItem>
                     {i < recentPurchases.length - 1 && <Divider sx={{ mx: 2.5 }} />}

@@ -134,7 +134,7 @@ function BudgetCard({ budget, isEditor, onEdit, onDelete, onActivate, onDuplicat
             <Box>
               <Typography variant="caption" color="text.secondary">Presupuesto</Typography>
               <Typography variant="h6" fontWeight={800} sx={{ letterSpacing: '-0.02em', color: meta.color }}>
-                ${budget.target_amount.toLocaleString('es-AR')}
+                S/{budget.target_amount.toLocaleString('es-AR')}
               </Typography>
             </Box>
             <ArrowForward sx={{ fontSize: 18, color: 'text.disabled' }} />

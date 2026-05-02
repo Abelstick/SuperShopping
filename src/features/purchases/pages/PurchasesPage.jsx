@@ -96,7 +96,7 @@ function PurchaseRow({ purchase, isOwner, onView, onDelete }) {
 
       <Box sx={{ textAlign: 'right', flexShrink: 0 }}>
         <Typography variant="subtitle2" fontWeight={800} color="primary.main">
-          ${(purchase.total_amount || 0).toFixed(2)}
+          S/{(purchase.total_amount || 0).toFixed(2)}
         </Typography>
       </Box>
 
@@ -149,7 +149,7 @@ export default function PurchasesPage() {
             {purchases.length} compra{purchases.length !== 1 ? 's' : ''}
             {purchases.length > 0 && (
               <Box component="span" sx={{ color: 'primary.main', fontWeight: 600, ml: 1 }}>
-                · ${totalSpent.toFixed(2)} en total
+                · S/{totalSpent.toFixed(2)} en total
               </Box>
             )}
           </Typography>
@@ -195,7 +195,7 @@ export default function PurchasesPage() {
                 </Typography>
                 <Box sx={{ flexGrow: 1, height: 1, bgcolor: 'divider' }} />
                 <Typography variant="caption" color="text.secondary" fontWeight={600}>
-                  ${items.reduce((a, p) => a + (p.total_amount || 0), 0).toFixed(2)}
+                  S/{items.reduce((a, p) => a + (p.total_amount || 0), 0).toFixed(2)}
                 </Typography>
               </Box>
 

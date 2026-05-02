@@ -5,7 +5,7 @@ import {
   ListItemText, IconButton, Chip, LinearProgress, Divider,
   Dialog, DialogTitle, DialogContent, DialogActions, TextField,
   Grid, FormControl, InputLabel, Select, MenuItem, Alert,
-  Skeleton, InputAdornment, Menu, Tooltip,
+  Skeleton, InputAdornment, Menu, Tooltip, Switch, FormControlLabel,
 } from '@mui/material'
 import {
   ArrowBack, Add, Edit, Delete, ShoppingCart, CheckCircle,
@@ -30,8 +30,8 @@ function SectionLabel({ children }) {
 }
 
 // ── Item row ─────────────────────────────────────────────────────────────────
-function ItemRow({ item, isEditor, onEdit, onDelete, onToggle }) {
-  const estimated = item.quantity * (item.estimated_price || 0)
+function ItemRow({ item, isEditor, onEdit, onDelete, onToggle, multiplyByQty }) {
+  const estimated = multiplyByQty ? item.quantity * (item.estimated_price || 0) : (item.estimated_price || 0)
   const catColor = item.categories?.color
 
   return (
@@ -66,10 +66,10 @@ function ItemRow({ item, isEditor, onEdit, onDelete, onToggle }) {
           <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', mt: 0.4, alignItems: 'center' }}>
             <Chip size="small" label={`${item.quantity} ${item.unit}`} variant="outlined" sx={{ height: 20, fontSize: '0.6875rem' }} />
             {item.estimated_price && (
-              <Chip size="small" label={`$${item.estimated_price}`} variant="outlined" color="success" sx={{ height: 20, fontSize: '0.6875rem' }} />
+              <Chip size="small" label={`S/${item.estimated_price}`} variant="outlined" color="success" sx={{ height: 20, fontSize: '0.6875rem' }} />
             )}
-            {estimated > 0 && (
-              <Typography variant="caption" color="text.secondary">= ${estimated.toFixed(2)}</Typography>
+            {multiplyByQty && estimated > 0 && (
+              <Typography variant="caption" color="text.secondary">= S/{estimated.toFixed(2)}</Typography>
             )}
             {catColor && (
               <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: catColor, flexShrink: 0 }} />
@@ -216,7 +216,7 @@ function BudgetItemForm({ open, item, budgetId, categories, products, onClose })
                 value={form.estimated_price}
                 onChange={set('estimated_price')}
                 placeholder="0.00"
-                slotProps={{ input: { startAdornment: <InputAdornment position="start">$</InputAdornment> }, htmlInput: { min: 0, step: 0.01 } }}
+                slotProps={{ input: { startAdornment: <InputAdornment position="start">S/</InputAdornment> }, htmlInput: { min: 0, step: 0.01 } }}
               />
             </Grid>
             <Grid size={{ xs: 12, sm: 6 }}>
@@ -299,6 +299,7 @@ export default function BudgetDetailPage() {
   const [clearCheckedConfirm, setClearCheckedConfirm] = useState(false)
   const [clearAllConfirm, setClearAllConfirm] = useState(false)
   const [bulkLoading, setBulkLoading] = useState(false)
+  const [multiplyByQty, setMultiplyByQty] = useState(false)
 
   useEffect(() => {
     fetchBudgetWithItems(budgetId)
@@ -346,8 +347,12 @@ export default function BudgetDetailPage() {
     if (error) enqueueSnackbar('Error al vaciar', { variant: 'error' })
     else enqueueSnackbar('Lista vaciada', { variant: 'success' })
   }
-  const totalEst  = budgetItems.reduce((a, i) => a + (i.quantity * (i.estimated_price || 0)), 0)
-  const checkedEst = checked.reduce((a, i) => a + (i.quantity * (i.estimated_price || 0)), 0)
+  const totalEst  = multiplyByQty
+    ? budgetItems.reduce((a, i) => a + (i.quantity * (i.estimated_price || 0)), 0)
+    : budgetItems.reduce((a, i) => a + (i.estimated_price || 0), 0)
+  const checkedEst = multiplyByQty
+    ? checked.reduce((a, i) => a + (i.quantity * (i.estimated_price || 0)), 0)
+    : checked.reduce((a, i) => a + (i.estimated_price || 0), 0)
   const budgetProgress = currentBudget?.target_amount
     ? Math.min((checkedEst / currentBudget.target_amount) * 100, 100)
     : 0
@@ -418,8 +423,8 @@ export default function BudgetDetailPage() {
         {[
           { label: 'Items total',    value: budgetItems.length,       color: '#6366f1' },
           { label: 'Completados',    value: checked.length,           color: '#10b981' },
-          { label: 'Est. total',     value: `$${totalEst.toFixed(0)}`, color: '#71717a' },
-          { label: 'Est. completado', value: `$${checkedEst.toFixed(0)}`, color: overBudget ? '#f43f5e' : '#f59e0b' },
+          { label: 'Est. total',     value: `S/${totalEst.toFixed(0)}`, color: '#71717a' },
+          { label: 'Est. completado', value: `S/${checkedEst.toFixed(0)}`, color: overBudget ? '#f43f5e' : '#f59e0b' },
         ].map((s) => (
           <Grid size={{ xs: 6, sm: 3 }} key={s.label}>
             <Card sx={{ p: 2, textAlign: 'center' }}>
@@ -439,9 +444,9 @@ export default function BudgetDetailPage() {
             <Typography variant="body2" fontWeight={600}>Progreso vs. presupuesto</Typography>
             <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.5 }}>
               <Typography variant="subtitle2" fontWeight={800} color={overBudget ? 'error.main' : 'text.primary'}>
-                ${checkedEst.toFixed(0)}
+                S/{checkedEst.toFixed(0)}
               </Typography>
-              <Typography variant="caption" color="text.secondary">/ ${currentBudget.target_amount}</Typography>
+              <Typography variant="caption" color="text.secondary">/ S/{currentBudget.target_amount}</Typography>
             </Box>
           </Box>
           <LinearProgress
@@ -452,7 +457,7 @@ export default function BudgetDetailPage() {
           />
           {overBudget && (
             <Typography variant="caption" color="error.main" fontWeight={600} sx={{ mt: 0.75, display: 'block' }}>
-              ⚠ Superaste el presupuesto por ${(checkedEst - currentBudget.target_amount).toFixed(0)}
+              ⚠ Superaste el presupuesto por S/{(checkedEst - currentBudget.target_amount).toFixed(0)}
             </Typography>
           )}
         </Card>
@@ -468,6 +473,15 @@ export default function BudgetDetailPage() {
             </Typography>
           )}
         </Typography>
+        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+          {budgetItems.length > 0 && (
+            <FormControlLabel
+              control={<Switch size="small" checked={multiplyByQty} onChange={(e) => setMultiplyByQty(e.target.checked)} />}
+              label={<Typography variant="caption" color="text.secondary">×cant.</Typography>}
+              labelPlacement="start"
+              sx={{ m: 0, gap: 0.5 }}
+            />
+          )}
         {isEditor && (
           <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
             {budgetItems.length > 0 && (
@@ -528,6 +542,7 @@ export default function BudgetDetailPage() {
             </Button>
           </Box>
         )}
+        </Box>
       </Box>
 
       <Card>
@@ -552,6 +567,7 @@ export default function BudgetDetailPage() {
                 <ItemRow
                   item={item}
                   isEditor={isEditor}
+                  multiplyByQty={multiplyByQty}
                   onToggle={() => updateBudgetItem(item.id, { is_checked: true })}
                   onEdit={() => setItemDialog({ open: true, item })}
                   onDelete={() => setDeleteConfirm(item)}
@@ -575,6 +591,7 @@ export default function BudgetDetailPage() {
                 <ItemRow
                   item={item}
                   isEditor={isEditor}
+                  multiplyByQty={multiplyByQty}
                   onToggle={() => updateBudgetItem(item.id, { is_checked: false })}
                   onEdit={() => setItemDialog({ open: true, item })}
                   onDelete={() => setDeleteConfirm(item)}

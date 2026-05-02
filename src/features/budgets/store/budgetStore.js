@@ -161,8 +161,8 @@ export const useBudgetStore = create((set, get) => ({
 
   getBudgetSummary: () => {
     const { budgetItems } = get()
-    const totalEstimated = budgetItems.reduce((acc, i) => acc + (i.quantity * (i.estimated_price || 0)), 0)
-    const totalChecked = budgetItems.filter((i) => i.is_checked).reduce((acc, i) => acc + (i.quantity * (i.estimated_price || 0)), 0)
+    const totalEstimated = budgetItems.reduce((acc, i) => acc + (i.estimated_price || 0), 0)
+    const totalChecked = budgetItems.filter((i) => i.is_checked).reduce((acc, i) => acc + (i.estimated_price || 0), 0)
     return { totalEstimated, totalChecked, itemCount: budgetItems.length, checkedCount: budgetItems.filter((i) => i.is_checked).length }
   },
 }))
