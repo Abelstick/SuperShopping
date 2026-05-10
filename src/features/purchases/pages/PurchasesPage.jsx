@@ -2,16 +2,38 @@ import { useEffect, useState } from 'react'
 import {
   Box, Typography, Card, Avatar, Chip, IconButton, Button,
   Dialog, DialogTitle, DialogContent, DialogActions,
-  Skeleton, Divider,
+  Skeleton, Divider, Tooltip,
 } from '@mui/material'
 import {
-  Receipt, Delete, Visibility, CalendarToday, Person, Store,
+  Receipt, Delete, Visibility, CalendarToday, Person, Store, FileDownloadOutlined,
 } from '@mui/icons-material'
 import { useNavigate } from 'react-router-dom'
 import { useSnackbar } from 'notistack'
 import { useWorkspaceStore } from '@/features/workspace/store/workspaceStore'
 import { usePurchaseStore } from '../store/purchaseStore'
 import { useAppStore } from '@/store/appStore'
+
+function exportPurchasesCSV(purchases) {
+  const header = ['Fecha', 'Nombre', 'Tienda', 'Total (S/)', 'Presupuesto', 'Ejecutado por']
+  const rows = purchases.map((p) => [
+    p.date || '',
+    p.name || '',
+    p.store || '',
+    (p.total_amount || 0).toFixed(2),
+    p.budgets?.name || '',
+    p.profiles?.full_name || '',
+  ])
+  const csv = [header, ...rows]
+    .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+    .join('\n')
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `compras_${new Date().toISOString().split('T')[0]}.csv`
+  a.click()
+  URL.revokeObjectURL(url)
+}
 
 function groupByMonth(purchases) {
   const groups = {}
@@ -160,6 +182,13 @@ export default function PurchasesPage() {
             )}
           </Typography>
         </Box>
+        {purchases.length > 0 && (
+          <Tooltip title="Exportar historial como CSV">
+            <IconButton onClick={() => exportPurchasesCSV(purchases)} size="small">
+              <FileDownloadOutlined />
+            </IconButton>
+          </Tooltip>
+        )}
       </Box>
 
       {loading ? (

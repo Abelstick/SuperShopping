@@ -1,18 +1,21 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import {
   Box, Button, Card, Typography, Grid, Chip,
   IconButton, Menu, MenuItem, Dialog, DialogTitle,
-  DialogContent, DialogActions, Skeleton, Divider, LinearProgress,
+  DialogContent, DialogActions, Skeleton, Divider, LinearProgress, Tooltip,
 } from '@mui/material'
 import {
   Add, MoreVert, Edit, Delete, PlayArrow, Receipt,
-  AttachMoney, CalendarToday, Store, ArrowForward, ContentCopy,
+  CalendarToday, Store, ArrowForward, ContentCopy,
+  TrendingUp, TrendingDown, TrendingFlat,
+  Warning, ErrorOutline,
 } from '@mui/icons-material'
 import { useNavigate } from 'react-router-dom'
 import { useSnackbar } from 'notistack'
 import { useAuthStore } from '@/features/auth/store/authStore'
 import { useWorkspaceStore } from '@/features/workspace/store/workspaceStore'
 import { useBudgetStore } from '../store/budgetStore'
+import { usePurchaseStore } from '@/features/purchases/store/purchaseStore'
 import { useAppStore } from '@/store/appStore'
 import BudgetForm from '../components/BudgetForm'
 
@@ -23,9 +26,117 @@ const STATUS_META = {
   cancelled: { label: 'Cancelado',  bg: 'rgba(244,63,94,0.12)',    color: '#f43f5e' },
 }
 
-function BudgetCard({ budget, isEditor, onEdit, onDelete, onActivate, onDuplicate, onOpen }) {
+function StatCard({ label, value, color, sub }) {
+  return (
+    <Card sx={{ p: 2, height: '100%' }}>
+      <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.5 }}>
+        {label}
+      </Typography>
+      <Typography variant="h5" fontWeight={800} sx={{ letterSpacing: '-0.02em', color: color || 'text.primary' }}>
+        S/{value}
+      </Typography>
+      {sub && (
+        <Typography variant="caption" color="text.disabled">{sub}</Typography>
+      )}
+    </Card>
+  )
+}
+
+function ConsumptionChart({ purchases }) {
+  const months = useMemo(() => {
+    const byMonth = {}
+    purchases.forEach((p) => {
+      if (!p.date) return
+      const key = p.date.substring(0, 7)
+      byMonth[key] = (byMonth[key] || 0) + (p.total_amount || 0)
+    })
+    return Object.entries(byMonth)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .slice(-6)
+      .map(([key, total]) => ({
+        label: new Date(key + '-02').toLocaleDateString('es-AR', { month: 'short', year: '2-digit' }),
+        total,
+      }))
+  }, [purchases])
+
+  if (months.length < 2) return null
+
+  const maxTotal = Math.max(...months.map((m) => m.total), 1)
+  const last = months[months.length - 1]
+  const prev = months[months.length - 2]
+  const diff = prev.total > 0 ? ((last.total - prev.total) / prev.total) * 100 : null
+
+  const TrendIcon = diff === null ? TrendingFlat : diff > 0 ? TrendingUp : TrendingDown
+  const trendColor = diff === null ? 'text.secondary' : diff > 0 ? 'error.main' : 'success.main'
+
+  return (
+    <Card sx={{ p: 2.5, mb: 3 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+        <Typography variant="subtitle2" fontWeight={700}>Patrones de consumo</Typography>
+        {diff !== null && (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <TrendIcon sx={{ fontSize: 16, color: trendColor }} />
+            <Typography variant="caption" sx={{ color: trendColor, fontWeight: 600 }}>
+              {diff > 0 ? '+' : ''}{diff.toFixed(0)}% vs mes anterior
+            </Typography>
+          </Box>
+        )}
+      </Box>
+      <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-end', height: 80 }}>
+        {months.map((m, i) => {
+          const isLast = i === months.length - 1
+          return (
+            <Tooltip key={i} title={`S/${m.total.toFixed(2)}`} placement="top">
+              <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.5, cursor: 'default' }}>
+                <Box
+                  sx={{
+                    width: '100%',
+                    height: Math.max((m.total / maxTotal) * 64, 4),
+                    bgcolor: isLast ? 'primary.main' : 'primary.light',
+                    borderRadius: '3px 3px 0 0',
+                    opacity: 0.5 + (i / months.length) * 0.5,
+                    transition: 'height 0.3s ease',
+                  }}
+                />
+                <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.6rem', textAlign: 'center', lineHeight: 1.2 }}>
+                  {m.label}
+                </Typography>
+              </Box>
+            </Tooltip>
+          )
+        })}
+      </Box>
+      <Box sx={{ mt: 1.5, pt: 1.5, borderTop: 1, borderColor: 'divider', display: 'flex', gap: 3 }}>
+        <Box>
+          <Typography variant="caption" color="text.disabled">Promedio mensual</Typography>
+          <Typography variant="body2" fontWeight={700}>
+            S/{(months.reduce((a, m) => a + m.total, 0) / months.length).toFixed(2)}
+          </Typography>
+        </Box>
+        <Box>
+          <Typography variant="caption" color="text.disabled">Mayor gasto</Typography>
+          <Typography variant="body2" fontWeight={700}>
+            S/{Math.max(...months.map((m) => m.total)).toFixed(2)}
+          </Typography>
+        </Box>
+        <Box>
+          <Typography variant="caption" color="text.disabled">Meses analizados</Typography>
+          <Typography variant="body2" fontWeight={700}>{months.length}</Typography>
+        </Box>
+      </Box>
+    </Card>
+  )
+}
+
+function BudgetCard({ budget, isEditor, onEdit, onDelete, onActivate, onDuplicate, onOpen, spentAmount }) {
   const [anchorEl, setAnchorEl] = useState(null)
   const meta = STATUS_META[budget.status] || STATUS_META.draft
+
+  const spent = spentAmount || 0
+  const limit = budget.target_amount || 0
+  const ratio = limit > 0 ? spent / limit : 0
+  const isOver = ratio > 1
+  const isNear = ratio >= 0.8 && ratio <= 1
 
   return (
     <Card
@@ -47,19 +158,40 @@ function BudgetCard({ budget, isEditor, onEdit, onDelete, onActivate, onDuplicat
         {/* Header */}
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
           <Box sx={{ flexGrow: 1, minWidth: 0, mr: 1 }}>
-            <Chip
-              size="small"
-              label={meta.label}
-              sx={{
-                mb: 0.75,
-                bgcolor: meta.bg,
-                color: meta.color,
-                fontWeight: 700,
-                fontSize: '0.6875rem',
-                height: 22,
-                border: `1px solid ${meta.color}33`,
-              }}
-            />
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.75, flexWrap: 'wrap' }}>
+              <Chip
+                size="small"
+                label={meta.label}
+                sx={{
+                  bgcolor: meta.bg,
+                  color: meta.color,
+                  fontWeight: 700,
+                  fontSize: '0.6875rem',
+                  height: 22,
+                  border: `1px solid ${meta.color}33`,
+                }}
+              />
+              {isOver && (
+                <Tooltip title="Gasto real supera el límite del presupuesto">
+                  <Chip
+                    size="small"
+                    icon={<ErrorOutline sx={{ fontSize: '13px !important' }} />}
+                    label="Excedido"
+                    sx={{ height: 22, fontSize: '0.6275rem', fontWeight: 700, bgcolor: 'rgba(244,63,94,0.1)', color: '#f43f5e', border: '1px solid rgba(244,63,94,0.3)' }}
+                  />
+                </Tooltip>
+              )}
+              {isNear && !isOver && (
+                <Tooltip title="Gasto real supera el 80% del límite">
+                  <Chip
+                    size="small"
+                    icon={<Warning sx={{ fontSize: '13px !important' }} />}
+                    label="Cerca del límite"
+                    sx={{ height: 22, fontSize: '0.6275rem', fontWeight: 700, bgcolor: 'rgba(245,158,11,0.1)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.3)' }}
+                  />
+                </Tooltip>
+              )}
+            </Box>
             <Typography variant="h6" fontWeight={700} noWrap sx={{ letterSpacing: '-0.01em' }}>
               {budget.name}
             </Typography>
@@ -118,26 +250,41 @@ function BudgetCard({ budget, isEditor, onEdit, onDelete, onActivate, onDuplicat
           )}
         </Box>
 
-        {/* Budget amount */}
-        {budget.target_amount && (
-          <Box
-            sx={{
-              mt: 2,
-              pt: 2,
-              borderTop: 1,
-              borderColor: 'divider',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-            }}
-          >
-            <Box>
-              <Typography variant="caption" color="text.secondary">Presupuesto</Typography>
-              <Typography variant="h6" fontWeight={800} sx={{ letterSpacing: '-0.02em', color: meta.color }}>
-                S/{budget.target_amount.toLocaleString('es-AR')}
-              </Typography>
+        {/* Budget amount + spending progress */}
+        {limit > 0 && (
+          <Box sx={{ mt: 2, pt: 2, borderTop: 1, borderColor: 'divider' }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.75 }}>
+              <Box>
+                <Typography variant="caption" color="text.secondary">Límite</Typography>
+                <Typography variant="h6" fontWeight={800} sx={{ letterSpacing: '-0.02em', color: meta.color }}>
+                  S/{limit.toLocaleString('es-AR')}
+                </Typography>
+              </Box>
+              {spent > 0 && (
+                <Box sx={{ textAlign: 'right' }}>
+                  <Typography variant="caption" color="text.secondary">Gastado</Typography>
+                  <Typography variant="body2" fontWeight={700} color={isOver ? 'error.main' : 'text.primary'}>
+                    S/{spent.toFixed(2)}
+                  </Typography>
+                </Box>
+              )}
+              {spent === 0 && <ArrowForward sx={{ fontSize: 18, color: 'text.disabled' }} />}
             </Box>
-            <ArrowForward sx={{ fontSize: 18, color: 'text.disabled' }} />
+            {spent > 0 && (
+              <LinearProgress
+                variant="determinate"
+                value={Math.min(ratio * 100, 100)}
+                sx={{
+                  height: 4,
+                  borderRadius: 2,
+                  bgcolor: 'action.hover',
+                  '& .MuiLinearProgress-bar': {
+                    bgcolor: isOver ? 'error.main' : isNear ? 'warning.main' : 'success.main',
+                    borderRadius: 2,
+                  },
+                }}
+              />
+            )}
           </Box>
         )}
       </Box>
@@ -165,14 +312,34 @@ export default function BudgetsPage() {
   const { user } = useAuthStore()
   const { currentWorkspace } = useWorkspaceStore()
   const { budgets, loading, fetchBudgets, updateBudget, deleteBudget, duplicateBudget } = useBudgetStore()
+  const { purchases, fetchPurchases } = usePurchaseStore()
   const { refreshSignal } = useAppStore()
   const { enqueueSnackbar } = useSnackbar()
   const [formDialog, setFormDialog] = useState({ open: false, budget: null })
   const [deleteConfirm, setDeleteConfirm] = useState(null)
 
   useEffect(() => {
-    if (currentWorkspace) fetchBudgets(currentWorkspace.id)
+    if (currentWorkspace) {
+      fetchBudgets(currentWorkspace.id)
+      fetchPurchases(currentWorkspace.id)
+    }
   }, [currentWorkspace?.id, refreshSignal])
+
+  const spentByBudgetId = useMemo(() => {
+    const map = {}
+    purchases.forEach((p) => {
+      if (p.budget_id) map[p.budget_id] = (map[p.budget_id] || 0) + (p.total_amount || 0)
+    })
+    return map
+  }, [purchases])
+
+  const summaryStats = useMemo(() => {
+    const budgetsWithLimit = budgets.filter((b) => b.target_amount > 0)
+    const totalLimits = budgetsWithLimit.reduce((acc, b) => acc + b.target_amount, 0)
+    const totalSpent = budgets.reduce((acc, b) => acc + (spentByBudgetId[b.id] || 0), 0)
+    const totalRemaining = totalLimits - totalSpent
+    return { totalLimits, totalSpent, totalRemaining, budgetsWithLimit: budgetsWithLimit.length }
+  }, [budgets, spentByBudgetId])
 
   const handleDelete = async () => {
     const { error } = await deleteBudget(deleteConfirm.id)
@@ -225,6 +392,38 @@ export default function BudgetsPage() {
         )}
       </Box>
 
+      {/* Summary stats */}
+      {budgets.length > 0 && (
+        <Grid container spacing={2} sx={{ mb: 3 }}>
+          <Grid size={{ xs: 12, sm: 4 }}>
+            <StatCard
+              label="Total límites"
+              value={summaryStats.totalLimits.toFixed(2)}
+              sub={`${summaryStats.budgetsWithLimit} presupuesto${summaryStats.budgetsWithLimit !== 1 ? 's' : ''} con límite`}
+            />
+          </Grid>
+          <Grid size={{ xs: 12, sm: 4 }}>
+            <StatCard
+              label="Total gastado"
+              value={summaryStats.totalSpent.toFixed(2)}
+              color={summaryStats.totalSpent > summaryStats.totalLimits && summaryStats.totalLimits > 0 ? 'error.main' : undefined}
+              sub={purchases.filter((p) => p.budget_id).length + ' compras vinculadas'}
+            />
+          </Grid>
+          <Grid size={{ xs: 12, sm: 4 }}>
+            <StatCard
+              label="Total restante"
+              value={Math.abs(summaryStats.totalRemaining).toFixed(2)}
+              color={summaryStats.totalRemaining < 0 ? 'error.main' : summaryStats.totalRemaining === 0 ? 'text.secondary' : 'success.main'}
+              sub={summaryStats.totalRemaining < 0 ? 'Excedido' : summaryStats.totalRemaining === 0 ? 'Sin límites definidos' : 'Disponible'}
+            />
+          </Grid>
+        </Grid>
+      )}
+
+      {/* Consumption patterns */}
+      {purchases.length > 0 && <ConsumptionChart purchases={purchases} />}
+
       {loading ? (
         <Grid container spacing={2}>
           {[1, 2, 3].map((i) => (
@@ -274,6 +473,7 @@ export default function BudgetsPage() {
                     <BudgetCard
                       budget={b}
                       isEditor={isEditor}
+                      spentAmount={spentByBudgetId[b.id] || 0}
                       onOpen={() => navigate(`/budgets/${b.id}`)}
                       onEdit={() => setFormDialog({ open: true, budget: b })}
                       onDelete={() => setDeleteConfirm(b)}
@@ -300,6 +500,7 @@ export default function BudgetsPage() {
                     <BudgetCard
                       budget={b}
                       isEditor={isEditor}
+                      spentAmount={spentByBudgetId[b.id] || 0}
                       onOpen={() => navigate(`/budgets/${b.id}`)}
                       onEdit={() => setFormDialog({ open: true, budget: b })}
                       onDelete={() => setDeleteConfirm(b)}
