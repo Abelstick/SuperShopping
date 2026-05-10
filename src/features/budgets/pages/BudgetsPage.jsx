@@ -8,7 +8,7 @@ import {
   Add, MoreVert, Edit, Delete, PlayArrow, Receipt,
   CalendarToday, Store, ArrowForward, ContentCopy,
   TrendingUp, TrendingDown, TrendingFlat,
-  Warning, ErrorOutline,
+  Warning, ErrorOutlined,
 } from '@mui/icons-material'
 import { useNavigate } from 'react-router-dom'
 import { useSnackbar } from 'notistack'
@@ -175,7 +175,7 @@ function BudgetCard({ budget, isEditor, onEdit, onDelete, onActivate, onDuplicat
                 <Tooltip title="Gasto real supera el límite del presupuesto">
                   <Chip
                     size="small"
-                    icon={<ErrorOutline sx={{ fontSize: '13px !important' }} />}
+                    icon={<ErrorOutlined sx={{ fontSize: '13px !important' }} />}
                     label="Excedido"
                     sx={{ height: 22, fontSize: '0.6275rem', fontWeight: 700, bgcolor: 'rgba(244,63,94,0.1)', color: '#f43f5e', border: '1px solid rgba(244,63,94,0.3)' }}
                   />
@@ -523,16 +523,53 @@ export default function BudgetsPage() {
         onClose={() => setFormDialog({ open: false, budget: null })}
       />
 
-      <Dialog open={Boolean(deleteConfirm)} onClose={() => setDeleteConfirm(null)}>
-        <DialogTitle>Eliminar presupuesto</DialogTitle>
-        <DialogContent>
-          <Typography>
-            ¿Eliminar <strong>"{deleteConfirm?.name}"</strong>? Esta acción no se puede deshacer.
-          </Typography>
+      <Dialog open={Boolean(deleteConfirm)} onClose={() => setDeleteConfirm(null)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ pb: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Delete sx={{ color: 'error.main' }} />
+            Eliminar presupuesto
+          </Box>
+        </DialogTitle>
+        <DialogContent sx={{ pt: 1 }}>
+          {(() => {
+            const linked = purchases.filter((p) => p.budget_id === deleteConfirm?.id)
+            const spent = spentByBudgetId[deleteConfirm?.id] || 0
+            const isActive = deleteConfirm?.status === 'active'
+            return (
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                <Typography>
+                  ¿Eliminar <strong>"{deleteConfirm?.name}"</strong>? Esta acción no se puede deshacer.
+                </Typography>
+                {isActive && (
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 1.25, borderRadius: 1.5, bgcolor: 'rgba(244,63,94,0.08)', border: '1px solid rgba(244,63,94,0.25)' }}>
+                    <Warning sx={{ fontSize: 18, color: 'error.main', flexShrink: 0 }} />
+                    <Typography variant="body2" color="error.main" fontWeight={600}>
+                      Este presupuesto está activo actualmente.
+                    </Typography>
+                  </Box>
+                )}
+                {linked.length > 0 && (
+                  <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, p: 1.25, borderRadius: 1.5, bgcolor: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.25)' }}>
+                    <Warning sx={{ fontSize: 18, color: 'warning.main', flexShrink: 0, mt: 0.1 }} />
+                    <Box>
+                      <Typography variant="body2" color="warning.main" fontWeight={600}>
+                        Tiene {linked.length} compra{linked.length !== 1 ? 's' : ''} vinculada{linked.length !== 1 ? 's' : ''}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        Las compras no se eliminarán, pero quedarán sin presupuesto asignado. Total gastado: <strong>S/{spent.toFixed(2)}</strong>
+                      </Typography>
+                    </Box>
+                  </Box>
+                )}
+              </Box>
+            )
+          })()}
         </DialogContent>
-        <DialogActions>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
           <Button onClick={() => setDeleteConfirm(null)}>Cancelar</Button>
-          <Button variant="contained" color="error" onClick={handleDelete}>Eliminar</Button>
+          <Button variant="contained" color="error" onClick={handleDelete} startIcon={<Delete />}>
+            Eliminar
+          </Button>
         </DialogActions>
       </Dialog>
     </Box>
