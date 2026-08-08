@@ -4,6 +4,7 @@ import {
   List, ListItem, ListItemText, useTheme, Button,
   Checkbox, Dialog, DialogTitle, DialogContent, DialogActions, Tooltip,
 } from '@mui/material'
+import { alpha } from '@mui/material/styles'
 import {
   Inventory2, Receipt, ShoppingCart, AttachMoney, Warning,
   ArrowForward, TrendingUp, TrendingDown, Delete,
@@ -22,24 +23,23 @@ import { useBudgetStore } from '@/features/budgets/store/budgetStore'
 import { usePurchaseStore } from '@/features/purchases/store/purchaseStore'
 import { useAppStore } from '@/store/appStore'
 
-const ACCENTS = {
-  indigo:  { bg: 'rgba(99,102,241,0.12)',  color: '#6366f1' },
-  cyan:    { bg: 'rgba(6,182,212,0.12)',   color: '#06b6d4' },
-  violet:  { bg: 'rgba(139,92,246,0.12)', color: '#8b5cf6' },
-  emerald: { bg: 'rgba(16,185,129,0.12)', color: '#10b981' },
-  amber:   { bg: 'rgba(245,158,11,0.12)', color: '#f59e0b' },
-  rose:    { bg: 'rgba(244,63,94,0.12)',  color: '#f43f5e' },
+// Accent names map to theme.palette keys so every "color" here stays wired
+// to the live theme instead of duplicating its hex values by hand.
+const ACCENT_KEYS = {
+  indigo: 'primary', cyan: 'secondary', violet: 'info',
+  emerald: 'success', amber: 'warning', rose: 'error',
 }
-const USER_COLORS = ['#6366f1', '#06b6d4', '#10b981', '#f59e0b', '#f43f5e', '#8b5cf6']
+const MEMBER_ACCENT_ORDER = ['primary', 'secondary', 'success', 'warning', 'error', 'info']
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
 function StatCard({ icon, label, value, accent = 'indigo', sub, loading }) {
-  const c = ACCENTS[accent]
+  const theme = useTheme()
+  const color = theme.palette[ACCENT_KEYS[accent]].main
   if (loading) return <Skeleton variant="rectangular" height={110} sx={{ borderRadius: 2 }} />
   return (
     <Card sx={{ p: 2.5, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-      <Box sx={{ width: 36, height: 36, borderRadius: '10px', bgcolor: c.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: c.color }}>
+      <Box sx={{ width: 36, height: 36, borderRadius: '10px', bgcolor: alpha(color, 0.12), display: 'flex', alignItems: 'center', justifyContent: 'center', color }}>
         {icon}
       </Box>
       <Box>
@@ -50,7 +50,7 @@ function StatCard({ icon, label, value, accent = 'indigo', sub, loading }) {
           {label}
         </Typography>
         {sub && (
-          <Typography variant="caption" sx={{ display: 'block', mt: 0.5, color: sub.positive ? '#10b981' : sub.negative ? '#f43f5e' : 'text.disabled' }}>
+          <Typography variant="caption" sx={{ display: 'block', mt: 0.5, color: sub.positive ? theme.palette.success.main : sub.negative ? theme.palette.error.main : 'text.secondary' }}>
             {sub.text}
           </Typography>
         )}
@@ -81,31 +81,32 @@ function UserBar({ name, amount, max, color }) {
         <Typography variant="body2" fontWeight={700}>S/{amount.toLocaleString('es-AR', { maximumFractionDigits: 0 })}</Typography>
       </Box>
       <Box sx={{ height: 6, bgcolor: 'action.hover', borderRadius: 99, overflow: 'hidden' }}>
-        <Box sx={{ height: '100%', width: `${pct}%`, background: `linear-gradient(90deg, ${color}88, ${color})`, borderRadius: 99, transition: 'width 0.6s ease' }} />
+        <Box sx={{ height: '100%', width: '100%', transform: `scaleX(${pct / 100})`, transformOrigin: 'left', background: `linear-gradient(90deg, ${color}88, ${color})`, borderRadius: 99, transition: 'transform 0.6s ease' }} />
       </Box>
     </Box>
   )
 }
 
 function PredictionCard({ icon, title, value, sub, accent = 'amber', loading, empty }) {
-  const c = ACCENTS[accent]
+  const theme = useTheme()
+  const color = theme.palette[ACCENT_KEYS[accent]].main
   if (loading) return <Skeleton variant="rectangular" height={100} sx={{ borderRadius: 2 }} />
   return (
-    <Card sx={{ p: 2, borderLeft: `3px solid ${c.color}44`, position: 'relative', overflow: 'hidden' }}>
-      <Box sx={{ position: 'absolute', top: -16, right: -16, width: 64, height: 64, borderRadius: '50%', bgcolor: c.bg, pointerEvents: 'none' }} />
+    <Card sx={{ p: 2, position: 'relative', overflow: 'hidden' }}>
+      <Box sx={{ position: 'absolute', top: -16, right: -16, width: 64, height: 64, borderRadius: '50%', bgcolor: alpha(color, 0.12), pointerEvents: 'none' }} />
       <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.25 }}>
-        <Box sx={{ p: 0.75, bgcolor: c.bg, borderRadius: '7px', color: c.color, display: 'flex', flexShrink: 0 }}>
+        <Box sx={{ p: 0.75, bgcolor: alpha(color, 0.12), borderRadius: '7px', color, display: 'flex', flexShrink: 0 }}>
           {icon}
         </Box>
         <Box sx={{ minWidth: 0 }}>
-          <Typography variant="caption" color="text.disabled" sx={{ display: 'block', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', fontSize: '0.625rem', mb: 0.25 }}>
+          <Typography component="h3" variant="caption" color="text.secondary" sx={{ display: 'block', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', fontSize: '0.625rem', mb: 0.25 }}>
             {title}
           </Typography>
           {empty ? (
-            <Typography variant="caption" color="text.disabled" sx={{ fontStyle: 'italic' }}>Sin datos</Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic' }}>Sin datos</Typography>
           ) : (
             <>
-              <Typography variant="subtitle1" fontWeight={800} sx={{ letterSpacing: '-0.02em', color: c.color, lineHeight: 1.1 }}>
+              <Typography variant="subtitle1" fontWeight={800} sx={{ letterSpacing: '-0.02em', color, lineHeight: 1.1 }}>
                 {value}
               </Typography>
               {sub && (
@@ -246,7 +247,7 @@ export default function DashboardPage() {
 
       {/* ── Header ── */}
       <Box>
-        <Typography variant="h4" fontWeight={800} sx={{ letterSpacing: '-0.02em', mb: 0.25 }}>
+        <Typography component="h1" variant="h4" fontWeight={800} sx={{ letterSpacing: '-0.02em', mb: 0.25 }}>
           {greeting},{' '}
           <Box component="span" sx={{ color: 'primary.main' }}>
             {profile?.full_name?.split(' ')[0] || 'bienvenido'}
@@ -296,8 +297,8 @@ export default function DashboardPage() {
           {hasChartData && (
             <Grid size={{ xs: 12, md: hasUserData ? 8 : 12 }}>
               <Card sx={{ p: 2.5 }}>
-                <Typography variant="overline" color="text.disabled" sx={{ fontSize: '0.6875rem' }}>GASTO MENSUAL</Typography>
-                <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 2 }}>Últimos {monthlyData.length} meses</Typography>
+                <Typography component="h3" variant="subtitle1" fontWeight={700} sx={{ mb: 0.25 }}>Gasto mensual</Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>Últimos {monthlyData.length} meses</Typography>
                 <ResponsiveContainer width="100%" height={180}>
                   <AreaChart data={monthlyData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
                     <defs>
@@ -320,10 +321,10 @@ export default function DashboardPage() {
           {hasUserData && (
             <Grid size={{ xs: 12, md: hasChartData ? 4 : 12 }}>
               <Card sx={{ p: 2.5 }}>
-                <Typography variant="overline" color="text.disabled" sx={{ fontSize: '0.6875rem' }}>GASTO POR MIEMBRO</Typography>
-                <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 2.5 }}>Distribución del equipo</Typography>
+                <Typography component="h3" variant="subtitle1" fontWeight={700} sx={{ mb: 0.25 }}>Gasto por miembro</Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2.5 }}>Distribución del equipo</Typography>
                 {[...spendingByUser].sort((a, b) => b.total - a.total).map((u, i) => (
-                  <UserBar key={u.name} name={u.name} amount={u.total} max={maxUserSpent} color={USER_COLORS[i % USER_COLORS.length]} />
+                  <UserBar key={u.name} name={u.name} amount={u.total} max={maxUserSpent} color={theme.palette[MEMBER_ACCENT_ORDER[i % MEMBER_ACCENT_ORDER.length]].main} />
                 ))}
               </Card>
             </Grid>
@@ -334,11 +335,11 @@ export default function DashboardPage() {
       {/* ── Predictions — always 4 cards ── */}
       <Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
-          <Box sx={{ p: 0.5, bgcolor: 'rgba(245,158,11,0.12)', borderRadius: '6px', color: '#f59e0b', display: 'flex' }}>
+          <Box sx={{ p: 0.5, bgcolor: alpha(theme.palette.warning.main, 0.12), borderRadius: '6px', color: theme.palette.warning.main, display: 'flex' }}>
             <AutoAwesome sx={{ fontSize: 14 }} />
           </Box>
-          <Typography variant="overline" color="text.disabled" sx={{ fontSize: '0.6875rem', letterSpacing: '0.08em' }}>
-            PREDICCIONES E INSIGHTS
+          <Typography component="h2" variant="overline" color="text.secondary" sx={{ fontSize: '0.6875rem', letterSpacing: '0.08em' }}>
+            Predicciones e insights
           </Typography>
         </Box>
         <Grid container spacing={2}>
@@ -398,27 +399,26 @@ export default function DashboardPage() {
             {/* Header */}
             <Box sx={{ px: 2.5, py: 1.75, borderBottom: 1, borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
               <Box sx={{ flexGrow: 1 }}>
-                <Typography variant="overline" color="text.disabled" sx={{ fontSize: '0.6875rem' }}>ACTIVIDAD RECIENTE</Typography>
-                <Typography variant="subtitle1" fontWeight={700} sx={{ lineHeight: 1.2 }}>Últimas compras</Typography>
+                <Typography component="h3" variant="subtitle1" fontWeight={700} sx={{ lineHeight: 1.2 }}>Últimas compras</Typography>
               </Box>
               {recentPurchases.length > 0 && (
                 <>
                   {purchSelectMode && selectedPurch.size > 0 && (
                     <Button size="small" color="error" variant="contained" startIcon={<Delete sx={{ fontSize: 14 }} />}
-                      onClick={() => setPurchDeleteConfirm(true)} sx={{ height: 28, fontSize: '0.7rem', flexShrink: 0 }}>
+                      onClick={() => setPurchDeleteConfirm(true)} sx={{ minHeight: 36, fontSize: '0.7rem', flexShrink: 0 }}>
                       Eliminar ({selectedPurch.size})
                     </Button>
                   )}
                   <Tooltip title={purchSelectMode ? 'Cancelar selección' : 'Seleccionar'}>
                     <Button size="small" variant={purchSelectMode ? 'outlined' : 'text'} color={purchSelectMode ? 'error' : 'inherit'}
                       onClick={() => { setPurchSelectMode(m => !m); setSelectedPurch(new Set()) }}
-                      sx={{ height: 28, color: purchSelectMode ? undefined : 'text.secondary', fontSize: '0.7rem', px: 1.5, flexShrink: 0 }}>
+                      sx={{ minHeight: 36, color: purchSelectMode ? undefined : 'text.secondary', fontSize: '0.7rem', px: 1.5, flexShrink: 0 }}>
                       {purchSelectMode ? 'Cancelar' : 'Seleccionar'}
                     </Button>
                   </Tooltip>
                   {!purchSelectMode && (
                     <Button size="small" endIcon={<ArrowForward sx={{ fontSize: 13 }} />} onClick={() => navigate('/purchases')}
-                      sx={{ color: 'text.secondary', height: 28, fontSize: '0.7rem', flexShrink: 0 }}>
+                      sx={{ color: 'text.secondary', minHeight: 36, fontSize: '0.7rem', flexShrink: 0 }}>
                       Ver todas
                     </Button>
                   )}
@@ -433,7 +433,7 @@ export default function DashboardPage() {
                 </Box>
                 <Box>
                   <Typography variant="body2" fontWeight={600} color="text.secondary">Sin compras todavía</Typography>
-                  <Typography variant="caption" color="text.disabled">Iniciá una compra desde un presupuesto activo</Typography>
+                  <Typography variant="caption" color="text.secondary">Iniciá una compra desde un presupuesto activo</Typography>
                 </Box>
                 <Button size="small" variant="outlined" onClick={() => navigate('/budgets')}>
                   Ver presupuestos
@@ -448,10 +448,11 @@ export default function DashboardPage() {
                       onClick={purchSelectMode ? () => togglePurchSelect(p.id) : undefined}
                     >
                       {purchSelectMode && (
-                        <Checkbox size="small" checked={selectedPurch.has(p.id)} sx={{ p: 0.25 }}
-                          onClick={e => { e.stopPropagation(); togglePurchSelect(p.id) }} />
+                        <Checkbox checked={selectedPurch.has(p.id)} sx={{ p: 0.5 }}
+                          onClick={e => { e.stopPropagation(); togglePurchSelect(p.id) }}
+                          inputProps={{ 'aria-label': `Seleccionar compra ${p.name}` }} />
                       )}
-                      <Box sx={{ width: 32, height: 32, borderRadius: '9px', bgcolor: 'rgba(99,102,241,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <Box sx={{ width: 32, height: 32, borderRadius: '9px', bgcolor: alpha(theme.palette.primary.main, 0.1), display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                         <ShoppingCart sx={{ fontSize: 15, color: 'primary.main' }} />
                       </Box>
                       <ListItemText
@@ -482,10 +483,7 @@ export default function DashboardPage() {
             <Card>
               <Box sx={{ px: 2.5, py: 1.75, borderBottom: 1, borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
                 <Box sx={{ flexGrow: 1 }}>
-                  <Typography variant="overline" color="text.disabled" sx={{ fontSize: '0.6875rem' }}>
-                    {stockAlerts.length > 0 ? 'ALERTAS DE STOCK' : 'INVENTARIO'}
-                  </Typography>
-                  <Typography variant="subtitle1" fontWeight={700} sx={{ lineHeight: 1.2 }}>
+                  <Typography component="h3" variant="subtitle1" fontWeight={700} sx={{ lineHeight: 1.2 }}>
                     {lowStock.length > 0 ? 'Stock bajo' : atRisk.length > 0 ? 'Productos en riesgo' : 'Todo en orden'}
                   </Typography>
                 </Box>
@@ -493,12 +491,19 @@ export default function DashboardPage() {
                   <Chip
                     label={stockAlerts.length}
                     size="small"
-                    sx={{ bgcolor: lowStock.length > 0 ? 'rgba(244,63,94,0.1)' : 'rgba(245,158,11,0.1)', color: lowStock.length > 0 ? '#f43f5e' : '#f59e0b', fontWeight: 700, border: `1px solid ${lowStock.length > 0 ? 'rgba(244,63,94,0.2)' : 'rgba(245,158,11,0.2)'}`, height: 22, flexShrink: 0 }}
+                    aria-label={`${stockAlerts.length} ${lowStock.length > 0 ? 'productos agotados o en riesgo' : 'productos en riesgo'}`}
+                    sx={{
+                      bgcolor: alpha(lowStock.length > 0 ? theme.palette.error.main : theme.palette.warning.main, 0.1),
+                      color: lowStock.length > 0 ? theme.palette.error.main : theme.palette.warning.main,
+                      fontWeight: 700,
+                      border: `1px solid ${alpha(lowStock.length > 0 ? theme.palette.error.main : theme.palette.warning.main, 0.2)}`,
+                      height: 22, flexShrink: 0,
+                    }}
                   />
                 )}
                 {stockAlerts.length > 0 && stockSelectMode && selectedStock.size > 0 && (
                   <Button size="small" color="warning" variant="contained" startIcon={<Delete sx={{ fontSize: 14 }} />}
-                    onClick={() => setStockConfirm(true)} sx={{ height: 28, fontSize: '0.7rem', flexShrink: 0 }}>
+                    onClick={() => setStockConfirm(true)} sx={{ minHeight: 36, fontSize: '0.7rem', flexShrink: 0 }}>
                     Desactivar ({selectedStock.size})
                   </Button>
                 )}
@@ -506,7 +511,7 @@ export default function DashboardPage() {
                   <Tooltip title={stockSelectMode ? 'Cancelar' : 'Seleccionar'}>
                     <Button size="small" variant={stockSelectMode ? 'outlined' : 'text'} color={stockSelectMode ? 'error' : 'inherit'}
                       onClick={() => { setStockSelectMode(m => !m); setSelectedStock(new Set()) }}
-                      sx={{ height: 28, color: stockSelectMode ? undefined : 'text.secondary', fontSize: '0.7rem', px: 1, flexShrink: 0 }}>
+                      sx={{ minHeight: 36, color: stockSelectMode ? undefined : 'text.secondary', fontSize: '0.7rem', px: 1, flexShrink: 0 }}>
                       {stockSelectMode ? 'Cancelar' : 'Seleccionar'}
                     </Button>
                   </Tooltip>
@@ -515,12 +520,12 @@ export default function DashboardPage() {
 
               {stockAlerts.length === 0 ? (
                 <Box sx={{ px: 2.5, py: 2.5, display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                  <Box sx={{ p: 1, bgcolor: 'rgba(16,185,129,0.1)', borderRadius: '10px', color: '#10b981', display: 'flex' }}>
+                  <Box sx={{ p: 1, bgcolor: alpha(theme.palette.success.main, 0.1), borderRadius: '10px', color: theme.palette.success.main, display: 'flex' }}>
                     <CheckCircle sx={{ fontSize: 22 }} />
                   </Box>
                   <Box>
                     <Typography variant="body2" fontWeight={600}>Stock saludable</Typography>
-                    <Typography variant="caption" color="text.disabled">Todos los productos con stock suficiente</Typography>
+                    <Typography variant="caption" color="text.secondary">Todos los productos con stock suficiente</Typography>
                   </Box>
                 </Box>
               ) : (
@@ -532,20 +537,22 @@ export default function DashboardPage() {
                         onClick={stockSelectMode ? () => toggleStockSelect(p.id) : undefined}
                       >
                         {stockSelectMode && (
-                          <Checkbox size="small" checked={selectedStock.has(p.id)} sx={{ p: 0.25 }}
-                            onClick={e => { e.stopPropagation(); toggleStockSelect(p.id) }} />
+                          <Checkbox checked={selectedStock.has(p.id)} sx={{ p: 0.5 }}
+                            onClick={e => { e.stopPropagation(); toggleStockSelect(p.id) }}
+                            inputProps={{ 'aria-label': `Seleccionar producto ${p.name}` }} />
                         )}
-                        <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: p.categories?.color || '#a1a1aa', flexShrink: 0 }} />
+                        <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: p.categories?.color || theme.palette.text.disabled, flexShrink: 0 }} />
                         <ListItemText
                           primary={<Typography variant="body2" fontWeight={600} noWrap>{p.name}</Typography>}
-                          secondary={<Typography variant="caption" color="text.secondary">{p.current_quantity} {p.unit} · mín {p.min_quantity}</Typography>}
-                        />
-                        <Box sx={{ fontSize: 13, flexShrink: 0 }}>
-                          {p._sev === 'critical'
-                            ? <Warning sx={{ fontSize: 15, color: '#f43f5e' }} />
-                            : <Warning sx={{ fontSize: 15, color: '#f59e0b' }} />
+                          secondary={
+                            <Typography variant="caption" color="text.secondary">
+                              {p._sev === 'critical' ? 'Agotado' : 'Bajo'} · {p.current_quantity} {p.unit} (mín {p.min_quantity})
+                            </Typography>
                           }
-                        </Box>
+                        />
+                        <Tooltip title={p._sev === 'critical' ? 'Agotado' : 'Stock bajo'}>
+                          <Warning sx={{ fontSize: 15, flexShrink: 0, color: p._sev === 'critical' ? theme.palette.error.main : theme.palette.warning.main }} />
+                        </Tooltip>
                       </ListItem>
                       {i < Math.min(stockAlerts.length, 7) - 1 && <Divider sx={{ mx: 2.5 }} />}
                     </Box>
@@ -564,25 +571,30 @@ export default function DashboardPage() {
             {/* Team members — always rendered if members exist */}
             {members.length > 0 && (
               <Card sx={{ p: 2.5 }}>
-                <Typography variant="overline" color="text.disabled" sx={{ fontSize: '0.6875rem', display: 'block', mb: 0.25 }}>EQUIPO</Typography>
-                <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 2, lineHeight: 1.2 }}>{members.length} miembro{members.length > 1 ? 's' : ''}</Typography>
+                <Typography component="h3" variant="subtitle1" fontWeight={700} sx={{ mb: 2, lineHeight: 1.2 }}>
+                  Equipo · {members.length} miembro{members.length > 1 ? 's' : ''}
+                </Typography>
                 <Stack spacing={1.5}>
-                  {members.map((m, i) => (
-                    <Box key={m.id} sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
-                      <Avatar
-                        src={m.profiles?.avatar_url}
-                        sx={{ width: 32, height: 32, fontSize: 12, fontWeight: 700, bgcolor: USER_COLORS[i % USER_COLORS.length] + '30', color: USER_COLORS[i % USER_COLORS.length], border: '2px solid', borderColor: USER_COLORS[i % USER_COLORS.length] + '40' }}
-                      >
-                        {m.profiles?.full_name?.[0]?.toUpperCase()}
-                      </Avatar>
-                      <Box sx={{ minWidth: 0 }}>
-                        <Typography variant="body2" fontWeight={600} noWrap sx={{ fontSize: '0.8125rem', lineHeight: 1.2 }}>
-                          {m.profiles?.full_name || m.profiles?.email}
-                        </Typography>
-                        <Typography variant="caption" color="text.disabled" sx={{ textTransform: 'capitalize' }}>{m.role}</Typography>
+                  {members.map((m, i) => {
+                    const accentColor = theme.palette[MEMBER_ACCENT_ORDER[i % MEMBER_ACCENT_ORDER.length]].main
+                    return (
+                      <Box key={m.id} sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
+                        <Avatar
+                          src={m.profiles?.avatar_url}
+                          alt={m.profiles?.full_name || m.profiles?.email || 'Miembro del equipo'}
+                          sx={{ width: 32, height: 32, fontSize: 12, fontWeight: 700, bgcolor: alpha(accentColor, 0.18), color: accentColor, border: '2px solid', borderColor: alpha(accentColor, 0.25) }}
+                        >
+                          {m.profiles?.full_name?.[0]?.toUpperCase()}
+                        </Avatar>
+                        <Box sx={{ minWidth: 0 }}>
+                          <Typography variant="body2" fontWeight={600} noWrap sx={{ fontSize: '0.8125rem', lineHeight: 1.2 }}>
+                            {m.profiles?.full_name || m.profiles?.email}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'capitalize' }}>{m.role}</Typography>
+                        </Box>
                       </Box>
-                    </Box>
-                  ))}
+                    )
+                  })}
                 </Stack>
               </Card>
             )}

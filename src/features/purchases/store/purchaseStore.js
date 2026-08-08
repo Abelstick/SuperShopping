@@ -63,6 +63,17 @@ export const usePurchaseStore = create((set, get) => ({
     return { data, error }
   },
 
+  updatePurchaseItem: async (id, updates) => {
+    const { data, error } = await supabase
+      .from('purchase_items')
+      .update(updates)
+      .eq('id', id)
+      .select(`*, profiles!purchase_items_purchased_by_fkey(full_name), categories(name, color)`)
+      .single()
+    if (!error && data) set((s) => ({ purchaseItems: s.purchaseItems.map((i) => i.id === id ? { ...i, ...data } : i) }))
+    return { data, error }
+  },
+
   deletePurchase: async (id) => {
     const { error } = await supabase.from('purchases').delete().eq('id', id)
     if (!error) set((s) => ({ purchases: s.purchases.filter((p) => p.id !== id) }))
@@ -95,5 +106,19 @@ export const usePurchaseStore = create((set, get) => ({
     return Object.entries(byMonth)
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([month, total]) => ({ month, total }))
+  },
+
+  getLastPriceForProduct: async (productId) => {
+    if (!productId) return { data: null, error: null }
+    const { data, error } = await supabase
+      .from('purchase_items')
+      .select('unit_price, unit, quantity, purchases!inner(date)')
+      .eq('product_id', productId)
+      .not('unit_price', 'is', null)
+      .order('date', { foreignTable: 'purchases', ascending: false })
+      .limit(1)
+      .maybeSingle()
+    if (error || !data) return { data: null, error }
+    return { data: { price: Number(data.unit_price), date: data.purchases.date, unit: data.unit, quantity: data.quantity }, error: null }
   },
 }))

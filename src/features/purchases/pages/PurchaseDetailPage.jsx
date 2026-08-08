@@ -1,18 +1,35 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   Box, Typography, Card, CardContent, IconButton, List, ListItem,
   ListItemText, Chip, Grid, Skeleton, Divider, Avatar,
 } from '@mui/material'
-import { ArrowBack, Receipt, Person, Store, CalendarToday } from '@mui/icons-material'
+import { ArrowBack, Receipt, Person, Store, CalendarToday, Edit } from '@mui/icons-material'
+import { useSnackbar } from 'notistack'
 import { usePurchaseStore } from '../store/purchaseStore'
+import AdjustTotalDialog from '../components/AdjustTotalDialog'
+import EditPurchaseItemDialog from '../components/EditPurchaseItemDialog'
 
 export default function PurchaseDetailPage() {
   const { purchaseId } = useParams()
   const navigate = useNavigate()
-  const { currentPurchase, purchaseItems, loading, fetchPurchaseWithItems } = usePurchaseStore()
+  const { currentPurchase, purchaseItems, loading, fetchPurchaseWithItems, updatePurchase, updatePurchaseItem } = usePurchaseStore()
+  const { enqueueSnackbar } = useSnackbar()
+  const [adjustDialog, setAdjustDialog] = useState(false)
+  const [editItem, setEditItem] = useState(null)
+  const [saving, setSaving] = useState(false)
 
   useEffect(() => { fetchPurchaseWithItems(purchaseId) }, [purchaseId])
+
+  const itemsSubtotal = purchaseItems.reduce((a, i) => a + (i.total_price || 0), 0)
+
+  const handleAdjustTotal = async (total) => {
+    setSaving(true)
+    const { error } = await updatePurchase(purchaseId, { total_amount: total })
+    setSaving(false)
+    if (error) enqueueSnackbar('Error al ajustar el total', { variant: 'error' })
+    else { enqueueSnackbar('Total actualizado', { variant: 'success' }); setAdjustDialog(false) }
+  }
 
   if (loading && !currentPurchase) return <Skeleton variant="rectangular" height={400} sx={{ borderRadius: 2 }} />
 
@@ -81,22 +98,60 @@ export default function PurchaseDetailPage() {
                         <Typography variant="caption">{item.profiles?.full_name}</Typography>
                       </Box>}
                     />
-                    <Typography variant="subtitle2" fontWeight={700} color="primary" sx={{ ml: 2, whiteSpace: 'nowrap' }}>
-                      S/{(item.total_price || 0).toFixed(2)}
-                    </Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, ml: 2, flexShrink: 0 }}>
+                      <Typography variant="subtitle2" fontWeight={700} color="primary" sx={{ whiteSpace: 'nowrap' }}>
+                        S/{(item.total_price || 0).toFixed(2)}
+                      </Typography>
+                      <IconButton size="small" onClick={() => setEditItem(item)} sx={{ opacity: 0.5, '&:hover': { opacity: 1 } }}>
+                        <Edit fontSize="small" />
+                      </IconButton>
+                    </Box>
                   </ListItem>
                   {i < purchaseItems.length - 1 && <Divider />}
                 </Box>
               ))}
               <Divider />
-              <ListItem>
-                <ListItemText primary={<Typography fontWeight={700}>TOTAL</Typography>} />
-                <Typography variant="h6" fontWeight={700} color="primary">S/{(currentPurchase?.total_amount || 0).toFixed(2)}</Typography>
+              <ListItem
+                secondaryAction={
+                  <IconButton size="small" onClick={() => setAdjustDialog(true)} sx={{ opacity: 0.6, '&:hover': { opacity: 1 } }}>
+                    <Edit fontSize="small" />
+                  </IconButton>
+                }
+              >
+                <ListItemText
+                  primary={<Typography fontWeight={700}>TOTAL</Typography>}
+                  secondary={
+                    Math.abs((currentPurchase?.total_amount || 0) - itemsSubtotal) > 0.009
+                      ? `Suma de productos: S/${itemsSubtotal.toFixed(2)}`
+                      : null
+                  }
+                />
+                <Typography variant="h6" fontWeight={700} color="primary" sx={{ mr: 1 }}>
+                  S/{(currentPurchase?.total_amount || 0).toFixed(2)}
+                </Typography>
               </ListItem>
             </List>
           )}
         </CardContent>
       </Card>
+
+      <AdjustTotalDialog
+        open={adjustDialog}
+        itemsSubtotal={itemsSubtotal}
+        initialTotal={currentPurchase?.total_amount}
+        saving={saving}
+        title="Ajustar total"
+        confirmLabel="Guardar"
+        onConfirm={handleAdjustTotal}
+        onClose={() => setAdjustDialog(false)}
+      />
+
+      <EditPurchaseItemDialog
+        open={Boolean(editItem)}
+        item={editItem}
+        onSave={updatePurchaseItem}
+        onClose={() => setEditItem(null)}
+      />
     </Box>
   )
 }

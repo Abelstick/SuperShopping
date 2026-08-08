@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node \"C:\\\\Users\\\\Usuario\\\\.claude\\\\skills\\\\impeccable\\\\scripts\\\\detect.mjs\" --json src/features/dashboard/pages/DashboardPage.jsx)"
+    ]
+  }
+}

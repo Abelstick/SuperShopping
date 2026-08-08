@@ -7,8 +7,7 @@ import {
 import { Inventory2, Close, QrCode2 } from '@mui/icons-material'
 import { useSnackbar } from 'notistack'
 import { useInventoryStore } from '../store/inventoryStore'
-
-const UNITS = ['unidad', 'kg', 'g', 'L', 'ml', 'paquete', 'caja', 'botella', 'lata', 'bolsa', 'docena']
+import { UNITS } from '@/shared/constants/units'
 
 function SectionLabel({ children }) {
     return (
