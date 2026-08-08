@@ -1,0 +1,17 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "layout-transition",
+        "value": "*",
+        "files": [
+          "src/shared/components/Layout/AppLayout.jsx"
+        ],
+        "createdAt": "2026-08-08T02:37:55.819Z",
+        "reason": "User confirmed: width/margin-left transition is the standard MUI persistent-drawer collapse mechanism (space-reservation, not decorative), triggered only by a discrete sidebar-toggle click, not continuous/scroll-linked animation"
+      }
+    ]
+  }
+}

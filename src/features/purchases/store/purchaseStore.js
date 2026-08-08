@@ -5,6 +5,7 @@ export const usePurchaseStore = create((set, get) => ({
   purchases: [],
   currentPurchase: null,
   purchaseItems: [],
+  allItems: [],
   loading: false,
 
   fetchPurchases: async (workspaceId) => {
@@ -112,6 +113,22 @@ export const usePurchaseStore = create((set, get) => ({
     return Object.entries(byMonth)
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([month, total]) => ({ month, total }))
+  },
+
+  fetchAllItems: async (workspaceId) => {
+    set({ loading: true })
+    try {
+      const { data, error } = await supabase
+        .from('purchase_items')
+        .select('id, product_id, product_name, quantity, unit_price, total_price, unit, category_id, categories(name, color), purchases!inner(date, workspace_id)')
+        .eq('purchases.workspace_id', workspaceId)
+        .not('purchases.date', 'is', null)
+        .order('date', { foreignTable: 'purchases', ascending: true })
+      if (!error) set({ allItems: data || [] })
+      return { error }
+    } finally {
+      set({ loading: false })
+    }
   },
 
   getLastPriceForProduct: async (productId) => {

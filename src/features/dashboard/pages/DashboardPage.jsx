@@ -22,14 +22,7 @@ import { useInventoryStore } from '@/features/inventory/store/inventoryStore'
 import { useBudgetStore } from '@/features/budgets/store/budgetStore'
 import { usePurchaseStore } from '@/features/purchases/store/purchaseStore'
 import { useAppStore } from '@/store/appStore'
-
-// Accent names map to theme.palette keys so every "color" here stays wired
-// to the live theme instead of duplicating its hex values by hand.
-const ACCENT_KEYS = {
-  indigo: 'primary', cyan: 'secondary', violet: 'info',
-  emerald: 'success', amber: 'warning', rose: 'error',
-}
-const MEMBER_ACCENT_ORDER = ['primary', 'secondary', 'success', 'warning', 'error', 'info']
+import { ACCENT_KEYS, MEMBER_ACCENT_ORDER } from '@/shared/constants/accents'
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 

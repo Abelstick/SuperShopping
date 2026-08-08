@@ -9,7 +9,7 @@ import {
 import {
   Menu as MenuIcon, Dashboard, Inventory2, Receipt, ShoppingCart,
   Home, Logout, Person, ChevronLeft, DarkMode, LightMode,
-  MoreHoriz, Settings, ShoppingCartCheckout,
+  MoreHoriz, Settings, ShoppingCartCheckout, Insights,
 } from '@mui/icons-material'
 import { useAuthStore } from '@/features/auth/store/authStore'
 import { useWorkspaceStore } from '@/features/workspace/store/workspaceStore'
@@ -22,6 +22,7 @@ const NAV_MAIN = [
   { label: 'Inventario', icon: <Inventory2 sx={{ fontSize: 19 }} />, path: '/inventory' },
   { label: 'Presupuestos', icon: <Receipt sx={{ fontSize: 19 }} />, path: '/budgets' },
   { label: 'Compras', icon: <ShoppingCart sx={{ fontSize: 19 }} />, path: '/purchases' },
+  { label: 'Análisis', icon: <Insights sx={{ fontSize: 19 }} />, path: '/analysis' },
 ]
 
 const NAV_SECONDARY = [
@@ -402,7 +403,6 @@ export default function AppLayout() {
           flexDirection: 'column',
           minHeight: '100vh',
           minWidth: 0,
-          transition: 'margin-left 0.2s ease',
         }}
       >
         <Toolbar sx={{ minHeight: '52px !important' }} />

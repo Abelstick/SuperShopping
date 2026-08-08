@@ -22,6 +22,8 @@ import ShoppingModePage from '@/features/shopping/pages/ShoppingModePage'
 import PurchasesPage from '@/features/purchases/pages/PurchasesPage'
 import PurchaseDetailPage from '@/features/purchases/pages/PurchaseDetailPage'
 
+import ConsumptionAnalysisPage from '@/features/analysis/pages/ConsumptionAnalysisPage'
+
 export const router = createBrowserRouter([
   {
     path: '/auth/login',
@@ -55,6 +57,8 @@ export const router = createBrowserRouter([
 
       { path: 'purchases', element: <PurchasesPage /> },
       { path: 'purchases/:purchaseId', element: <PurchaseDetailPage /> },
+
+      { path: 'analysis', element: <ConsumptionAnalysisPage /> },
     ],
   },
   { path: '*', element: <Navigate to="/" replace /> },
