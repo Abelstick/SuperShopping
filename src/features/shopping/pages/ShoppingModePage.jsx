@@ -434,7 +434,7 @@ function PurchasedItemRow({ item, onRemove, onEdit }) {
           </IconButton>
         </Tooltip>
         <Tooltip title="Eliminar">
-          <IconButton size="small" onClick={() => onRemove(item.id)} sx={{ opacity: 0.5, '&:hover': { opacity: 1, color: 'error.main' } }}>
+          <IconButton size="small" onClick={() => onRemove(item)} sx={{ opacity: 0.5, '&:hover': { opacity: 1, color: 'error.main' } }}>
             <Delete fontSize="small" />
           </IconButton>
         </Tooltip>
@@ -472,6 +472,7 @@ export default function ShoppingModePage() {
   const [showBought, setShowBought] = useState(false)
   const [exitConfirm, setExitConfirm] = useState(false)
   const [completeDialog, setCompleteDialog] = useState(false)
+  const [deleteItemConfirm, setDeleteItemConfirm] = useState(null)
 
   useEffect(() => {
     const resolveSessionPurchase = async (sessId, workspaceId, budgetIdRef) => {
@@ -592,10 +593,24 @@ export default function ShoppingModePage() {
           position: 'sticky', top: 0, zIndex: 20,
           bgcolor: 'background.default',
           borderBottom: '1px solid', borderColor: 'divider',
+          borderTop: '3px solid',
+          borderTopColor: 'success.main',
           pb: 1.5, pt: 1, px: 0,
           backdropFilter: 'blur(12px)',
         }}
       >
+        {/* Shopping mode badge */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1, px: 0.5 }}>
+          <Box sx={{
+            width: 7, height: 7, borderRadius: '50%', bgcolor: 'success.main', flexShrink: 0,
+            animation: 'shopPulse 1.6s ease-in-out infinite',
+            '@keyframes shopPulse': { '0%,100%': { opacity: 1, transform: 'scale(1)' }, '50%': { opacity: 0.45, transform: 'scale(0.75)' } },
+          }} />
+          <Typography variant="overline" color="success.main" fontWeight={700} sx={{ fontSize: '0.65rem', letterSpacing: '0.1em', lineHeight: 1 }}>
+            Modo compra activo
+          </Typography>
+        </Box>
+
         {/* Title row */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
           <IconButton size="small" onClick={() => setExitConfirm(true)} sx={{ mr: 0.5 }}>
@@ -677,7 +692,7 @@ export default function ShoppingModePage() {
                   <Box key={pi.id}>
                     <PurchasedItemRow
                       item={pi}
-                      onRemove={removePurchaseItem}
+                      onRemove={(item) => setDeleteItemConfirm(item)}
                       onEdit={(item) => setEditItemDialog({ open: true, item })}
                     />
                     {i < purchaseItems.length - 1 && <Divider component="li" />}
@@ -784,6 +799,37 @@ export default function ShoppingModePage() {
         <DialogActions>
           <Button onClick={() => setExitConfirm(false)} variant="contained">Seguir comprando</Button>
           <Button onClick={() => navigate('/budgets')} color="inherit">Salir</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={Boolean(deleteItemConfirm)} onClose={() => setDeleteItemConfirm(null)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ pb: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Delete sx={{ color: 'error.main' }} />
+            Eliminar producto comprado
+          </Box>
+        </DialogTitle>
+        <DialogContent sx={{ pt: 1 }}>
+          <Typography>
+            ¿Eliminar <strong>"{deleteItemConfirm?.product_name}"</strong> de esta compra?{' '}
+            {deleteItemConfirm?.total_price != null && (
+              <>Se descontarán <strong>S/{deleteItemConfirm.total_price.toFixed(2)}</strong> del total.</>
+            )}
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteItemConfirm(null)}>Cancelar</Button>
+          <Button
+            variant="contained"
+            color="error"
+            startIcon={<Delete />}
+            onClick={async () => {
+              await removePurchaseItem(deleteItemConfirm.id)
+              setDeleteItemConfirm(null)
+            }}
+          >
+            Eliminar
+          </Button>
         </DialogActions>
       </Dialog>
 
