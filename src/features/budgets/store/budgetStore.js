@@ -79,6 +79,16 @@ export const useBudgetStore = create((set, get) => ({
     return { data, error }
   },
 
+  addBudgetItemsBulk: async (budgetId, items) => {
+    if (!items.length) return { data: [], error: null }
+    const { data, error } = await supabase
+      .from('budget_items')
+      .insert(items.map((item) => ({ ...item, budget_id: budgetId })))
+      .select(`*, categories(id, name, color, icon, aisle)`)
+    if (!error && data) set((s) => ({ budgetItems: [...s.budgetItems, ...data] }))
+    return { data, error }
+  },
+
   updateBudgetItem: async (id, updates) => {
     const { data, error } = await supabase
       .from('budget_items')
@@ -93,6 +103,13 @@ export const useBudgetStore = create((set, get) => ({
   deleteBudgetItem: async (id) => {
     const { error } = await supabase.from('budget_items').delete().eq('id', id)
     if (!error) set((s) => ({ budgetItems: s.budgetItems.filter((i) => i.id !== id) }))
+    return { error }
+  },
+
+  deleteBudgetItemsBulk: async (ids) => {
+    if (!ids.length) return { error: null }
+    const { error } = await supabase.from('budget_items').delete().in('id', ids)
+    if (!error) set((s) => ({ budgetItems: s.budgetItems.filter((i) => !ids.includes(i.id)) }))
     return { error }
   },
 

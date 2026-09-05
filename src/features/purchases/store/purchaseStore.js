@@ -11,10 +11,15 @@ export const usePurchaseStore = create((set, get) => ({
   fetchPurchases: async (workspaceId) => {
     set({ loading: true })
     try {
+      // A purchase row exists from the moment shopping mode starts (purchase_items
+      // need it as a foreign key while items are added), so an abandoned or
+      // still-in-progress session would otherwise show up here as a "compra" with
+      // total S/0 — only sessions the shopper actually finished belong in the history.
       const { data, error } = await supabase
         .from('purchases')
-        .select(`*, profiles!purchases_executed_by_fkey(full_name, avatar_url), budgets(name)`)
+        .select(`*, profiles!purchases_executed_by_fkey(full_name, avatar_url), budgets(name), shopping_sessions!inner(status)`)
         .eq('workspace_id', workspaceId)
+        .eq('shopping_sessions.status', 'completed')
         .order('created_at', { ascending: false })
       if (!error) set({ purchases: data || [] })
       return { error }
@@ -118,11 +123,14 @@ export const usePurchaseStore = create((set, get) => ({
   fetchAllItems: async (workspaceId) => {
     set({ loading: true })
     try {
+      // Same reasoning as fetchPurchases: exclude items added during a shopping
+      // session that was abandoned or is still in progress.
       const { data, error } = await supabase
         .from('purchase_items')
-        .select('id, product_id, product_name, quantity, unit_price, total_price, unit, category_id, categories(name, color), purchases!inner(date, workspace_id)')
+        .select('id, product_id, product_name, quantity, unit_price, total_price, unit, category_id, categories(name, color), purchases!inner(date, workspace_id, shopping_sessions!inner(status))')
         .eq('purchases.workspace_id', workspaceId)
         .not('purchases.date', 'is', null)
+        .eq('purchases.shopping_sessions.status', 'completed')
         .order('date', { foreignTable: 'purchases', ascending: true })
       if (!error) set({ allItems: data || [] })
       return { error }

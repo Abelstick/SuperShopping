@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { supabase } from '@/lib/supabase'
 import {
   Box, Button, Card, Typography, List, ListItem,
   ListItemText, IconButton, Chip, LinearProgress, Divider,
@@ -11,7 +12,7 @@ import {
 import {
   ArrowBack, Add, Edit, Delete, ShoppingCart, CheckCircle,
   RadioButtonUnchecked, Close, ShoppingBag, Tune, DeleteForever,
-  DoneAll, RemoveDone, Warning,
+  DoneAll, RemoveDone, Warning, Checklist,
 } from '@mui/icons-material'
 import { useSnackbar } from 'notistack'
 import { useAuthStore } from '@/features/auth/store/authStore'
@@ -48,15 +49,16 @@ function SectionLabel({ children }) {
 }
 
 // ── Item row ─────────────────────────────────────────────────────────────────
-function ItemRow({ item, isEditor, onEdit, onDelete, multiplyByQty }) {
+function ItemRow({ item, isEditor, onEdit, onDelete, multiplyByQty, isLowStock, selectMode, selected, onToggleSelect }) {
   const estimated = multiplyByQty ? item.quantity * (item.estimated_price || 0) : (item.estimated_price || 0)
   const catColor = item.categories?.color
 
   return (
     <ListItem
-      sx={{ px: 2, py: 1.25 }}
+      sx={{ px: 2, py: 1.25, cursor: selectMode ? 'pointer' : 'default' }}
+      onClick={selectMode ? onToggleSelect : undefined}
       secondaryAction={
-        isEditor && (
+        !selectMode && isEditor && (
           <Box sx={{ display: 'flex', gap: 0.25 }}>
             <IconButton size="small" onClick={onEdit}><Edit sx={{ fontSize: 16 }} /></IconButton>
             <IconButton size="small" color="error" onClick={onDelete}><Delete sx={{ fontSize: 16 }} /></IconButton>
@@ -64,6 +66,13 @@ function ItemRow({ item, isEditor, onEdit, onDelete, multiplyByQty }) {
         )
       }
     >
+      {selectMode && (
+        <IconButton size="small" tabIndex={-1} disableRipple sx={{ mr: 1, p: 0.5 }}>
+          {selected
+            ? <CheckCircle color="primary" sx={{ fontSize: 20 }} />
+            : <RadioButtonUnchecked color="disabled" sx={{ fontSize: 20 }} />}
+        </IconButton>
+      )}
       <ListItemText
         primary={
           <Typography variant="body2" fontWeight={600}>
@@ -82,6 +91,9 @@ function ItemRow({ item, isEditor, onEdit, onDelete, multiplyByQty }) {
             {catColor && (
               <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: catColor, flexShrink: 0 }} />
             )}
+            {isLowStock && (
+              <Chip size="small" icon={<Warning sx={{ fontSize: 12 }} />} label="Stock bajo" color="warning" variant="outlined" sx={{ height: 20, fontSize: '0.6875rem' }} />
+            )}
           </Box>
         }
       />
@@ -90,7 +102,7 @@ function ItemRow({ item, isEditor, onEdit, onDelete, multiplyByQty }) {
 }
 
 // ── Budget item form dialog ──────────────────────────────────────────────────
-function BudgetItemForm({ open, item, budgetId, categories, products, onClose }) {
+function BudgetItemForm({ open, item, budgetId, categories, products, budgetItems, onClose }) {
   const { addBudgetItem, updateBudgetItem } = useBudgetStore()
   const { getLastPriceForProduct } = usePurchaseStore()
   const { enqueueSnackbar } = useSnackbar()
@@ -115,14 +127,24 @@ function BudgetItemForm({ open, item, budgetId, categories, products, onClose })
 
   const set = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }))
 
-  const lowStockCount = useMemo(() => products.filter(isLowStock).length, [products])
+  // Products already on this budget's list can't be picked again — keeps the
+  // same low-stock item from being added twice via the linker below.
+  const alreadyAddedProductIds = useMemo(
+    () => new Set(budgetItems.filter((bi) => bi.product_id && bi.id !== item?.id).map((bi) => bi.product_id)),
+    [budgetItems, item?.id]
+  )
+
+  const lowStockCount = useMemo(
+    () => products.filter((p) => isLowStock(p) && !alreadyAddedProductIds.has(p.id)).length,
+    [products, alreadyAddedProductIds]
+  )
   const productOptions = useMemo(() => {
-    const list = onlyLowStock ? products.filter(isLowStock) : products
+    const list = (onlyLowStock ? products.filter(isLowStock) : products).filter((p) => !alreadyAddedProductIds.has(p.id))
     return [...list].sort((a, b) => {
       const rank = (p) => (isLowStock(p) ? 0 : 1)
       return rank(a) - rank(b) || a.name.localeCompare(b.name)
     })
-  }, [products, onlyLowStock])
+  }, [products, onlyLowStock, alreadyAddedProductIds])
 
   // A price suggested for one product is meaningless for another, so switching
   // products always replaces the price field instead of leaving a stale value.
@@ -353,7 +375,7 @@ export default function BudgetDetailPage() {
   const {
     currentBudget, budgetItems, loading,
     fetchBudgetWithItems, updateBudgetItem, deleteBudgetItem,
-    clearAllItems,
+    clearAllItems, addBudgetItemsBulk, deleteBudgetItemsBulk,
   } = useBudgetStore()
   const { products, categories, fetchProducts, fetchCategories } = useInventoryStore()
   const { enqueueSnackbar } = useSnackbar()
@@ -363,6 +385,11 @@ export default function BudgetDetailPage() {
   const [clearAllConfirm, setClearAllConfirm] = useState(false)
   const [bulkLoading, setBulkLoading] = useState(false)
   const [multiplyByQty, setMultiplyByQty] = useState(false)
+  const [addingLowStock, setAddingLowStock] = useState(false)
+  const [selectMode, setSelectMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState(new Set())
+  const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false)
+  const [bulkDeleting, setBulkDeleting] = useState(false)
 
   useEffect(() => {
     fetchBudgetWithItems(budgetId)
@@ -384,6 +411,51 @@ export default function BudgetDetailPage() {
   const isEditor = ['owner', 'editor'].includes(currentWorkspace?.my_role)
   const statusMeta = STATUS_META[currentBudget?.status] || STATUS_META.draft
 
+  const addedProductIds = useMemo(
+    () => new Set(budgetItems.filter((i) => i.product_id).map((i) => i.product_id)),
+    [budgetItems]
+  )
+  const lowStockProducts = useMemo(() => products.filter(isLowStock), [products])
+  const lowStockProductIds = useMemo(() => new Set(lowStockProducts.map((p) => p.id)), [lowStockProducts])
+  const lowStockToAdd = useMemo(
+    () => lowStockProducts.filter((p) => !addedProductIds.has(p.id)),
+    [lowStockProducts, addedProductIds]
+  )
+
+  const handleAddLowStock = async () => {
+    setAddingLowStock(true)
+
+    // Pull each product's most recent purchase in one round trip: sorted by
+    // date desc, so the first row seen per product_id is its latest one.
+    const { data: lastPurchases } = await supabase
+      .from('purchase_items')
+      .select('product_id, unit_price, unit, quantity, purchases!inner(date)')
+      .in('product_id', lowStockToAdd.map((p) => p.id))
+      .not('unit_price', 'is', null)
+      .order('date', { foreignTable: 'purchases', ascending: false })
+
+    const lastByProduct = new Map()
+    for (const row of lastPurchases || []) {
+      if (!lastByProduct.has(row.product_id)) lastByProduct.set(row.product_id, row)
+    }
+
+    const payload = lowStockToAdd.map((p) => {
+      const last = lastByProduct.get(p.id)
+      return {
+        product_id: p.id,
+        product_name: p.name,
+        quantity: last ? Number(last.quantity) : (p.min_quantity > 0 ? Math.max(p.min_quantity - p.current_quantity, 1) : 1),
+        unit: last?.unit || p.unit,
+        category_id: p.category_id || null,
+        estimated_price: last ? Number(last.unit_price) : null,
+      }
+    })
+    const { error } = await addBudgetItemsBulk(budgetId, payload)
+    setAddingLowStock(false)
+    if (error) enqueueSnackbar('Error al agregar productos con stock bajo', { variant: 'error' })
+    else enqueueSnackbar(`${payload.length} producto${payload.length !== 1 ? 's' : ''} con stock bajo agregado${payload.length !== 1 ? 's' : ''} — revisa cantidad y precio`, { variant: 'success' })
+  }
+
   const handleClearAll = async () => {
     setClearAllConfirm(false)
     setBulkLoading(true)
@@ -391,6 +463,36 @@ export default function BudgetDetailPage() {
     setBulkLoading(false)
     if (error) enqueueSnackbar('Error al vaciar', { variant: 'error' })
     else enqueueSnackbar('Lista vaciada', { variant: 'success' })
+  }
+
+  const enterSelectMode = () => {
+    setSelectedIds(new Set())
+    setSelectMode(true)
+  }
+
+  const exitSelectMode = () => {
+    setSelectMode(false)
+    setSelectedIds(new Set())
+  }
+
+  const toggleItemSelected = (id) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+
+  const handleBulkDelete = async () => {
+    setBulkDeleting(true)
+    const { error } = await deleteBudgetItemsBulk([...selectedIds])
+    setBulkDeleting(false)
+    setBulkDeleteConfirm(false)
+    if (error) enqueueSnackbar('Error al eliminar los items', { variant: 'error' })
+    else {
+      enqueueSnackbar(`${selectedIds.size} item${selectedIds.size !== 1 ? 's' : ''} eliminado${selectedIds.size !== 1 ? 's' : ''}`, { variant: 'success' })
+      exitSelectMode()
+    }
   }
 
   if (loading && !currentBudget) {
@@ -504,60 +606,116 @@ export default function BudgetDetailPage() {
           )}
         </Typography>
         <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-          {budgetItems.length > 0 && (
-            <FormControlLabel
-              control={<Switch size="small" checked={multiplyByQty} onChange={(e) => setMultiplyByQty(e.target.checked)} />}
-              label={<Typography variant="caption" color="text.secondary">×cant.</Typography>}
-              labelPlacement="start"
-              sx={{ m: 0, gap: 0.5 }}
-            />
-          )}
-          {isEditor && (
+          {selectMode ? (
             <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-              {budgetItems.length > 0 && (
-                <>
-                  <Tooltip title="Mantenimiento de lista">
-                    <IconButton
-                      size="small"
-                      onClick={(e) => setMaintenanceAnchor(e.currentTarget)}
-                      disabled={bulkLoading}
-                      sx={{ border: 1, borderColor: 'divider', borderRadius: 2 }}
-                    >
-                      <Tune sx={{ fontSize: 17 }} />
-                    </IconButton>
-                  </Tooltip>
-                  <Menu
-                    anchorEl={maintenanceAnchor}
-                    open={Boolean(maintenanceAnchor)}
-                    onClose={() => setMaintenanceAnchor(null)}
-                    transformOrigin={{ horizontal: 'right', vertical: 'top' }}
-                    anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
-                  >
-                    <MenuItem
-                      onClick={() => { setMaintenanceAnchor(null); setClearAllConfirm(true) }}
-                      sx={{ color: 'error.main' }}
-                    >
-                      <DeleteForever sx={{ fontSize: 17, mr: 1.25 }} />
-                      Vaciar lista completa
-                    </MenuItem>
-                  </Menu>
-                </>
-              )}
-              <Button startIcon={<Add />} size="small" variant="outlined" onClick={() => setItemDialog({ open: true, item: null })}>
-                Agregar
+              <Typography variant="body2" color="text.secondary">
+                {selectedIds.size} seleccionado{selectedIds.size !== 1 ? 's' : ''}
+              </Typography>
+              <Tooltip title="Seleccionar todos">
+                <IconButton size="small" onClick={() => setSelectedIds(new Set(budgetItems.map((i) => i.id)))}>
+                  <DoneAll sx={{ fontSize: 18 }} />
+                </IconButton>
+              </Tooltip>
+              <Tooltip title="Deseleccionar todos">
+                <IconButton size="small" onClick={() => setSelectedIds(new Set())}>
+                  <RemoveDone sx={{ fontSize: 18 }} />
+                </IconButton>
+              </Tooltip>
+              <Button
+                size="small" variant="contained" color="error" startIcon={<Delete sx={{ fontSize: 16 }} />}
+                disabled={selectedIds.size === 0}
+                onClick={() => setBulkDeleteConfirm(true)}
+              >
+                Eliminar
+              </Button>
+              <Button size="small" color="inherit" startIcon={<Close sx={{ fontSize: 16 }} />} onClick={exitSelectMode}>
+                Cancelar
               </Button>
             </Box>
+          ) : (
+            <>
+              {budgetItems.length > 0 && (
+                <FormControlLabel
+                  control={<Switch size="small" checked={multiplyByQty} onChange={(e) => setMultiplyByQty(e.target.checked)} />}
+                  label={<Typography variant="caption" color="text.secondary">×cant.</Typography>}
+                  labelPlacement="start"
+                  sx={{ m: 0, gap: 0.5 }}
+                />
+              )}
+              {isEditor && (
+                <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                  {budgetItems.length > 0 && (
+                    <>
+                      <Tooltip title="Seleccionar varios items para eliminar">
+                        <IconButton
+                          size="small"
+                          onClick={enterSelectMode}
+                          disabled={bulkLoading}
+                          sx={{ border: 1, borderColor: 'divider', borderRadius: 2 }}
+                        >
+                          <Checklist sx={{ fontSize: 17 }} />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Mantenimiento de lista">
+                        <IconButton
+                          size="small"
+                          onClick={(e) => setMaintenanceAnchor(e.currentTarget)}
+                          disabled={bulkLoading}
+                          sx={{ border: 1, borderColor: 'divider', borderRadius: 2 }}
+                        >
+                          <Tune sx={{ fontSize: 17 }} />
+                        </IconButton>
+                      </Tooltip>
+                      <Menu
+                        anchorEl={maintenanceAnchor}
+                        open={Boolean(maintenanceAnchor)}
+                        onClose={() => setMaintenanceAnchor(null)}
+                        transformOrigin={{ horizontal: 'right', vertical: 'top' }}
+                        anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+                      >
+                        <MenuItem
+                          onClick={() => { setMaintenanceAnchor(null); setClearAllConfirm(true) }}
+                          sx={{ color: 'error.main' }}
+                        >
+                          <DeleteForever sx={{ fontSize: 17, mr: 1.25 }} />
+                          Vaciar lista completa
+                        </MenuItem>
+                      </Menu>
+                    </>
+                  )}
+                  {lowStockToAdd.length > 0 && (
+                    <Tooltip title="Agrega de una vez todos los productos con stock bajo que aún no están en la lista">
+                      <span>
+                        <Button
+                          startIcon={<Warning sx={{ fontSize: 16 }} />}
+                          size="small"
+                          variant="outlined"
+                          color="warning"
+                          onClick={handleAddLowStock}
+                          disabled={addingLowStock}
+                        >
+                          {addingLowStock ? 'Agregando…' : `Stock bajo (${lowStockToAdd.length})`}
+                        </Button>
+                      </span>
+                    </Tooltip>
+                  )}
+                  <Button startIcon={<Add />} size="small" variant="outlined" onClick={() => setItemDialog({ open: true, item: null })}>
+                    Agregar
+                  </Button>
+                </Box>
+              )}
+            </>
           )}
         </Box>
       </Box>
 
       <Card>
         {budgetItems.length === 0 ? (
-          <Box sx={{ py: 5, textAlign: 'center' }}>
+          <Box sx={{ py: 5, textAlign: 'center'}}>
             <ShoppingBag sx={{ fontSize: 40, color: 'text.disabled', mb: 1 }} />
             <Typography color="text.secondary" variant="body2" fontWeight={600}>Sin items</Typography>
             <Typography color="text.disabled" variant="caption" display="block" sx={{ mb: 2.5 }}>
-              Agrega productos para planificar la compra
+              Agrega productos para planificar la compra 
             </Typography>
             {isEditor && (
               <Button size="small" variant="contained" startIcon={<Add />} onClick={() => setItemDialog({ open: true, item: null })}>
@@ -573,6 +731,10 @@ export default function BudgetDetailPage() {
                   item={item}
                   isEditor={isEditor}
                   multiplyByQty={multiplyByQty}
+                  isLowStock={Boolean(item.product_id && lowStockProductIds.has(item.product_id))}
+                  selectMode={selectMode}
+                  selected={selectedIds.has(item.id)}
+                  onToggleSelect={() => toggleItemSelected(item.id)}
                   onEdit={() => setItemDialog({ open: true, item })}
                   onDelete={() => setDeleteConfirm(item)}
                 />
@@ -589,6 +751,7 @@ export default function BudgetDetailPage() {
         budgetId={budgetId}
         categories={categories}
         products={products}
+        budgetItems={budgetItems}
         onClose={() => setItemDialog({ open: false, item: null })}
       />
 
@@ -631,6 +794,22 @@ export default function BudgetDetailPage() {
           <Button onClick={() => setClearAllConfirm(false)}>Cancelar</Button>
           <Button variant="contained" color="error" onClick={handleClearAll}>
             Vaciar lista
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Delete selected items */}
+      <Dialog open={bulkDeleteConfirm} onClose={() => setBulkDeleteConfirm(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Eliminar seleccionados</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary">
+            ¿Eliminar los <strong>{selectedIds.size}</strong> items seleccionados del presupuesto?
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setBulkDeleteConfirm(false)}>Cancelar</Button>
+          <Button variant="contained" color="error" onClick={handleBulkDelete} disabled={bulkDeleting}>
+            {bulkDeleting ? 'Eliminando…' : 'Eliminar'}
           </Button>
         </DialogActions>
       </Dialog>

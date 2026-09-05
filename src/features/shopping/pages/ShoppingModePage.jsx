@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import {
@@ -12,6 +12,7 @@ import {
 import {
   ShoppingCart, Lock, LockOpen, Add, CheckCircle,
   ArrowBack, Done, Delete, ExpandMore, ExpandLess, Store, Edit,
+  RadioButtonUnchecked,
 } from '@mui/icons-material'
 import { useSnackbar } from 'notistack'
 import { useAuthStore } from '@/features/auth/store/authStore'
@@ -287,7 +288,7 @@ function AddItemDialog({ open, budgetItem, sessionId, purchaseId, userId, worksp
 }
 
 // ── Budget Item Card ─────────────────────────────────────────────────────────
-function BudgetItemCard({ item, lock, isLockedByMe, sessionId, purchaseId, userId, workspaceId, alreadyBought, onAddItem }) {
+function BudgetItemCard({ item, lock, isLockedByMe, sessionId, purchaseId, userId, workspaceId, alreadyBought, onAddItem, selectMode, selected, onToggleSelect }) {
   const theme = useTheme()
   const { lockItem, unlockItem } = useShoppingStore()
   const { enqueueSnackbar } = useSnackbar()
@@ -316,18 +317,29 @@ function BudgetItemCard({ item, lock, isLockedByMe, sessionId, purchaseId, userI
           ? 'warning.main'
           : 'divider',
         transition: 'all 0.2s ease',
+        cursor: selectMode && canInteract ? 'pointer' : 'default',
+        opacity: selectMode && !canInteract ? 0.5 : 1,
         '&:hover': { boxShadow: 4 },
       }}
+      onClick={selectMode && canInteract ? onToggleSelect : undefined}
     >
       <CardContent sx={{ py: '14px !important', px: 2 }}>
         <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
-          {/* Category dot */}
-          <Box
-            sx={{
-              width: 10, height: 10, borderRadius: '50%', flexShrink: 0, mt: 0.8,
-              bgcolor: item.categories?.color || (theme.palette.mode === 'dark' ? '#475569' : '#cbd5e1'),
-            }}
-          />
+          {/* Category dot / selection indicator */}
+          {selectMode ? (
+            <IconButton size="small" disabled={!canInteract} tabIndex={-1} disableRipple sx={{ mt: -0.5, p: 0.5 }}>
+              {selected
+                ? <CheckCircle color="primary" sx={{ fontSize: 20 }} />
+                : <RadioButtonUnchecked color="disabled" sx={{ fontSize: 20 }} />}
+            </IconButton>
+          ) : (
+            <Box
+              sx={{
+                width: 10, height: 10, borderRadius: '50%', flexShrink: 0, mt: 0.8,
+                bgcolor: item.categories?.color || (theme.palette.mode === 'dark' ? '#475569' : '#cbd5e1'),
+              }}
+            />
+          )}
 
           {/* Content */}
           <Box sx={{ flexGrow: 1, minWidth: 0 }}>
@@ -361,6 +373,7 @@ function BudgetItemCard({ item, lock, isLockedByMe, sessionId, purchaseId, userI
           </Box>
 
           {/* Actions */}
+          {!selectMode && (
           <Stack direction="row" spacing={0.5} sx={{ flexShrink: 0 }}>
             <Tooltip title={isLockedByMe ? 'Liberar' : isLocked ? 'Reservado por otro' : 'Reservar para mí'}>
               <span>
@@ -389,6 +402,7 @@ function BudgetItemCard({ item, lock, isLockedByMe, sessionId, purchaseId, userI
               </span>
             </Tooltip>
           </Stack>
+          )}
         </Box>
       </CardContent>
     </Card>
@@ -396,10 +410,21 @@ function BudgetItemCard({ item, lock, isLockedByMe, sessionId, purchaseId, userI
 }
 
 // ── Purchased Item Row ───────────────────────────────────────────────────────
-function PurchasedItemRow({ item, onRemove, onEdit }) {
+function PurchasedItemRow({ item, onRemove, onEdit, selectMode, selected, onToggleSelect }) {
   return (
-    <Box sx={{ px: 2, py: 1, display: 'flex', alignItems: 'center', gap: 1.5 }}>
-      <CheckCircle color="success" sx={{ fontSize: 20, flexShrink: 0 }} />
+    <Box
+      sx={{ px: 2, py: 1, display: 'flex', alignItems: 'center', gap: 1.5, cursor: selectMode ? 'pointer' : 'default' }}
+      onClick={selectMode ? onToggleSelect : undefined}
+    >
+      {selectMode ? (
+        <IconButton size="small" sx={{ p: 0.5, flexShrink: 0 }} tabIndex={-1} disableRipple>
+          {selected
+            ? <CheckCircle color="primary" sx={{ fontSize: 20 }} />
+            : <RadioButtonUnchecked color="disabled" sx={{ fontSize: 20 }} />}
+        </IconButton>
+      ) : (
+        <CheckCircle color="success" sx={{ fontSize: 20, flexShrink: 0 }} />
+      )}
       <Box sx={{ flexGrow: 1, minWidth: 0 }}>
         <Typography variant="body2" fontWeight={600} noWrap>
           {item.product_name}
@@ -427,6 +452,7 @@ function PurchasedItemRow({ item, onRemove, onEdit }) {
           S/{item.total_price.toFixed(2)}
         </Typography>
       )}
+      {!selectMode && (
       <Box sx={{ display: 'flex', flexShrink: 0, gap: 0.25 }}>
         <Tooltip title="Editar">
           <IconButton size="small" onClick={() => onEdit(item)} sx={{ opacity: 0.5, '&:hover': { opacity: 1 } }}>
@@ -439,6 +465,7 @@ function PurchasedItemRow({ item, onRemove, onEdit }) {
           </IconButton>
         </Tooltip>
       </Box>
+      )}
     </Box>
   )
 }
@@ -458,8 +485,8 @@ export default function ShoppingModePage() {
   const {
     session, participants, locks, purchaseItems,
     loading, startSession, fetchSession, completeSession,
-    getTotals, getLockForItem, removePurchaseItem, unsubscribe,
-    updatePurchaseItem,
+    getTotals, getLockForItem, removePurchaseItem, removePurchaseItemsBulk, unsubscribe,
+    updatePurchaseItem, addPurchaseItem, unlockItem,
   } = useShoppingStore()
   const { createPurchase, updatePurchase } = usePurchaseStore()
   const { enqueueSnackbar } = useSnackbar()
@@ -473,6 +500,19 @@ export default function ShoppingModePage() {
   const [exitConfirm, setExitConfirm] = useState(false)
   const [completeDialog, setCompleteDialog] = useState(false)
   const [deleteItemConfirm, setDeleteItemConfirm] = useState(null)
+  const [boughtSelectMode, setBoughtSelectMode] = useState(false)
+  const [boughtSelectedIds, setBoughtSelectedIds] = useState(new Set())
+  const [boughtBulkDeleteConfirm, setBoughtBulkDeleteConfirm] = useState(false)
+  const [boughtBulkDeleting, setBoughtBulkDeleting] = useState(false)
+  const [pendingSelectMode, setPendingSelectMode] = useState(false)
+  const [pendingSelectedIds, setPendingSelectedIds] = useState(new Set())
+  const [pendingBulkAdding, setPendingBulkAdding] = useState(false)
+
+  // React StrictMode mounts effects twice in development to surface unguarded
+  // side effects; without this guard, init() would run concurrently both times
+  // and — since neither run sees the other's still-in-flight insert — create
+  // two shopping_sessions/purchases rows for the same visit.
+  const initKeyRef = useRef(null)
 
   useEffect(() => {
     const resolveSessionPurchase = async (sessId, workspaceId, budgetIdRef) => {
@@ -510,6 +550,25 @@ export default function ShoppingModePage() {
         setInitialized(true)
       } else if (budgetId && currentWorkspace && user) {
         await fetchBudgetWithItems(budgetId)
+
+        // Resume the budget's active session instead of starting a new one —
+        // otherwise every "Iniciar compra" click orphans the previous session's
+        // progress (items stay in the DB but become unreachable from the UI).
+        const { data: existingSessions, error: existingSessionsError } = await supabase
+          .from('shopping_sessions')
+          .select('id')
+          .eq('budget_id', budgetId)
+          .eq('status', 'active')
+          .order('started_at', { ascending: false })
+          .limit(1)
+
+        if (existingSessionsError) console.error('Lookup of active session failed', existingSessionsError)
+
+        if (existingSessions?.[0]) {
+          navigate(`/shopping/${existingSessions[0].id}`, { replace: true })
+          return
+        }
+
         const { data: sess } = await startSession(budgetId, currentWorkspace.id, user.id)
         if (sess) {
           const purch = await resolveSessionPurchase(sess.id, currentWorkspace.id, budgetId)
@@ -520,7 +579,11 @@ export default function ShoppingModePage() {
       }
     }
 
-    if (user) init()
+    const key = `${sessionId || ''}|${budgetId || ''}|${user?.id || ''}`
+    if (user && initKeyRef.current !== key) {
+      initKeyRef.current = key
+      init()
+    }
     return () => unsubscribe()
   }, [sessionId, budgetId, user?.id])
 
@@ -544,6 +607,76 @@ export default function ShoppingModePage() {
   const purchasedIds = new Set(purchaseItems.map((p) => p.budget_item_id).filter(Boolean))
   const pendingItems = budgetItems.filter((i) => !purchasedIds.has(i.id))
   const boughtBudgetItems = budgetItems.filter((i) => purchasedIds.has(i.id))
+
+  const exitBoughtSelectMode = () => {
+    setBoughtSelectMode(false)
+    setBoughtSelectedIds(new Set())
+  }
+
+  const toggleBoughtSelected = (id) => {
+    setBoughtSelectedIds((prev) => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+
+  const handleBoughtBulkDelete = async () => {
+    setBoughtBulkDeleting(true)
+    const { error } = await removePurchaseItemsBulk([...boughtSelectedIds])
+    setBoughtBulkDeleting(false)
+    setBoughtBulkDeleteConfirm(false)
+    if (error) enqueueSnackbar('Error al eliminar los productos', { variant: 'error' })
+    else {
+      enqueueSnackbar(`${boughtSelectedIds.size} producto${boughtSelectedIds.size !== 1 ? 's' : ''} eliminado${boughtSelectedIds.size !== 1 ? 's' : ''} de la compra`, { variant: 'success' })
+      exitBoughtSelectMode()
+    }
+  }
+
+  const exitPendingSelectMode = () => {
+    setPendingSelectMode(false)
+    setPendingSelectedIds(new Set())
+  }
+
+  const togglePendingSelected = (id) => {
+    setPendingSelectedIds((prev) => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+
+  const handleAddSelectedPending = async () => {
+    const items = pendingItems.filter((i) => pendingSelectedIds.has(i.id))
+    setPendingBulkAdding(true)
+    const results = await Promise.all(items.map(async (budgetItem) => {
+      const { error } = await addPurchaseItem(
+        session.id, purchase?.id,
+        {
+          product_name: budgetItem.product_name,
+          brand: null,
+          quantity: budgetItem.quantity,
+          unit_price: budgetItem.estimated_price ?? null,
+          total_price: budgetItem.estimated_price ?? null,
+          unit: budgetItem.unit,
+          budget_item_id: budgetItem.id,
+          product_id: budgetItem.product_id || null,
+          category_id: budgetItem.category_id || null,
+          is_household: true,
+        },
+        user.id,
+        currentWorkspace?.id,
+      )
+      if (!error) await unlockItem(session.id, budgetItem.id)
+      return error
+    }))
+    setPendingBulkAdding(false)
+    exitPendingSelectMode()
+    const failed = results.filter(Boolean).length
+    const added = items.length - failed
+    if (failed) enqueueSnackbar(`${added} agregado${added !== 1 ? 's' : ''}, ${failed} con error`, { variant: 'warning' })
+    else enqueueSnackbar(`${added} producto${added !== 1 ? 's' : ''} agregado${added !== 1 ? 's' : ''} al carrito — revisa cantidad y precio`, { variant: 'success' })
+  }
 
   const handleComplete = async (finalTotal) => {
     if (!session) return
@@ -687,6 +820,35 @@ export default function ShoppingModePage() {
 
           <Collapse in={showBought}>
             <Card sx={{ mb: 2 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 1.5, py: 0.75 }}>
+                {boughtSelectMode ? (
+                  <>
+                    <Typography variant="caption" color="text.secondary">
+                      {boughtSelectedIds.size} seleccionado{boughtSelectedIds.size !== 1 ? 's' : ''}
+                    </Typography>
+                    <Stack direction="row" spacing={0.5} alignItems="center">
+                      <Button size="small" onClick={() => setBoughtSelectedIds(new Set(purchaseItems.map((i) => i.id)))}>Todos</Button>
+                      <Button size="small" onClick={() => setBoughtSelectedIds(new Set())}>Ninguno</Button>
+                      <Button
+                        size="small" variant="contained" color="error"
+                        disabled={boughtSelectedIds.size === 0}
+                        onClick={() => setBoughtBulkDeleteConfirm(true)}
+                      >
+                        Eliminar
+                      </Button>
+                      <Button size="small" color="inherit" onClick={exitBoughtSelectMode}>Cancelar</Button>
+                    </Stack>
+                  </>
+                ) : (
+                  <>
+                    <span />
+                    <Button size="small" onClick={() => { setBoughtSelectMode(true); setBoughtSelectedIds(new Set()) }}>
+                      Seleccionar varios
+                    </Button>
+                  </>
+                )}
+              </Box>
+              <Divider />
               <List disablePadding>
                 {purchaseItems.map((pi, i) => (
                   <Box key={pi.id}>
@@ -694,6 +856,9 @@ export default function ShoppingModePage() {
                       item={pi}
                       onRemove={(item) => setDeleteItemConfirm(item)}
                       onEdit={(item) => setEditItemDialog({ open: true, item })}
+                      selectMode={boughtSelectMode}
+                      selected={boughtSelectedIds.has(pi.id)}
+                      onToggleSelect={() => toggleBoughtSelected(pi.id)}
                     />
                     {i < purchaseItems.length - 1 && <Divider component="li" />}
                   </Box>
@@ -707,9 +872,43 @@ export default function ShoppingModePage() {
       {/* ── Pending budget items ── */}
       {pendingItems.length > 0 && (
         <Box sx={{ mt: purchaseItems.length > 0 ? 0 : 2 }}>
-          <Typography variant="body2" fontWeight={600} color="text.secondary" sx={{ mb: 1, px: 0.5 }}>
-            Pendientes ({pendingItems.length})
-          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1, px: 0.5 }}>
+            {pendingSelectMode ? (
+              <>
+                <Typography variant="body2" fontWeight={600} color="text.secondary">
+                  {pendingSelectedIds.size} seleccionado{pendingSelectedIds.size !== 1 ? 's' : ''}
+                </Typography>
+                <Stack direction="row" spacing={0.5} alignItems="center">
+                  <Button
+                    size="small"
+                    onClick={() => setPendingSelectedIds(new Set(
+                      pendingItems.filter((i) => { const l = getLockForItem(i.id); return !l || l.user_id === user?.id }).map((i) => i.id)
+                    ))}
+                  >
+                    Todos
+                  </Button>
+                  <Button size="small" onClick={() => setPendingSelectedIds(new Set())}>Ninguno</Button>
+                  <Button
+                    size="small" variant="contained" color="success"
+                    disabled={pendingSelectedIds.size === 0 || pendingBulkAdding}
+                    onClick={handleAddSelectedPending}
+                  >
+                    {pendingBulkAdding ? 'Agregando…' : `Agregar (${pendingSelectedIds.size})`}
+                  </Button>
+                  <Button size="small" color="inherit" onClick={exitPendingSelectMode}>Cancelar</Button>
+                </Stack>
+              </>
+            ) : (
+              <>
+                <Typography variant="body2" fontWeight={600} color="text.secondary">
+                  Pendientes ({pendingItems.length})
+                </Typography>
+                <Button size="small" onClick={() => { setPendingSelectMode(true); setPendingSelectedIds(new Set()) }}>
+                  Seleccionar varios
+                </Button>
+              </>
+            )}
+          </Box>
           {pendingItems.map((item) => {
             const lock = getLockForItem(item.id)
             return (
@@ -724,6 +923,9 @@ export default function ShoppingModePage() {
                 workspaceId={currentWorkspace?.id}
                 alreadyBought={purchasedIds.has(item.id)}
                 onAddItem={(i) => setAddItemDialog({ open: true, item: i })}
+                selectMode={pendingSelectMode}
+                selected={pendingSelectedIds.has(item.id)}
+                onToggleSelect={() => togglePendingSelected(item.id)}
               />
             )
           })}
@@ -829,6 +1031,26 @@ export default function ShoppingModePage() {
             }}
           >
             Eliminar
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={boughtBulkDeleteConfirm} onClose={() => setBoughtBulkDeleteConfirm(false)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ pb: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Delete sx={{ color: 'error.main' }} />
+            Eliminar seleccionados
+          </Box>
+        </DialogTitle>
+        <DialogContent sx={{ pt: 1 }}>
+          <Typography>
+            ¿Eliminar los <strong>{boughtSelectedIds.size}</strong> productos seleccionados de esta compra?
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setBoughtBulkDeleteConfirm(false)}>Cancelar</Button>
+          <Button variant="contained" color="error" startIcon={<Delete />} onClick={handleBoughtBulkDelete} disabled={boughtBulkDeleting}>
+            {boughtBulkDeleting ? 'Eliminando…' : 'Eliminar'}
           </Button>
         </DialogActions>
       </Dialog>

@@ -34,6 +34,7 @@ export const useShoppingStore = create((set, get) => ({
   },
 
   fetchSession: async (sessionId, userId) => {
+    if (!sessionId) return { error: null }
     const { data, error } = await supabase
       .from('shopping_sessions')
       .select('*')
@@ -47,31 +48,45 @@ export const useShoppingStore = create((set, get) => ({
         get().fetchPurchaseItems(sessionId),
       ])
       await get().joinSession(sessionId, userId)
+    } else if (error) {
+      console.error('fetchSession failed', error)
     }
     return { error }
   },
 
+  // A stray/orphaned realtime callback, a transient network error, or a call
+  // made with a not-yet-resolved sessionId must never silently wipe the cart —
+  // each guard below keeps the last known-good state instead of clearing it.
   fetchParticipants: async (sessionId) => {
-    const { data } = await supabase
+    if (!sessionId) return
+    const { data, error } = await supabase
       .from('shopping_participants')
       .select(`*, profiles(id, full_name, avatar_url, email)`)
       .eq('session_id', sessionId)
+    if (error) { console.error('fetchParticipants failed', error); return }
+    if (get().session?.id !== sessionId) return
     set({ participants: data || [] })
   },
 
   fetchLocks: async (sessionId) => {
-    const { data } = await supabase
+    if (!sessionId) return
+    const { data, error } = await supabase
       .from('product_locks')
       .select(`*, profiles(id, full_name, avatar_url)`)
       .eq('session_id', sessionId)
+    if (error) { console.error('fetchLocks failed', error); return }
+    if (get().session?.id !== sessionId) return
     set({ locks: data || [] })
   },
 
   fetchPurchaseItems: async (sessionId) => {
-    const { data } = await supabase
+    if (!sessionId) return
+    const { data, error } = await supabase
       .from('purchase_items')
       .select(`*, profiles!purchase_items_purchased_by_fkey(id, full_name, avatar_url), categories(name, color)`)
       .eq('session_id', sessionId)
+    if (error) { console.error('fetchPurchaseItems failed', error); return }
+    if (get().session?.id !== sessionId) return
     set({ purchaseItems: data || [] })
   },
 
@@ -139,6 +154,13 @@ export const useShoppingStore = create((set, get) => ({
   removePurchaseItem: async (id) => {
     const { error } = await supabase.from('purchase_items').delete().eq('id', id)
     if (!error) set((s) => ({ purchaseItems: s.purchaseItems.filter((i) => i.id !== id) }))
+    return { error }
+  },
+
+  removePurchaseItemsBulk: async (ids) => {
+    if (!ids.length) return { error: null }
+    const { error } = await supabase.from('purchase_items').delete().in('id', ids)
+    if (!error) set((s) => ({ purchaseItems: s.purchaseItems.filter((i) => !ids.includes(i.id)) }))
     return { error }
   },
 
