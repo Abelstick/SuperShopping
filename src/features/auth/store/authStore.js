@@ -83,6 +83,12 @@ export const useAuthStore = create((set, get) => ({
     set({ user: null, profile: null, session: null })
   },
 
+  // Fija la nueva contraseña tras abrir el enlace de recuperación (la sesión de recuperación la crea Supabase)
+  updatePassword: async (password) => {
+    const { error } = await supabase.auth.updateUser({ password })
+    return { error }
+  },
+
   resetPassword: async (email) => {
     return supabase.auth.resetPasswordForEmail(email, {
       redirectTo: `${window.location.origin}/auth/reset-password`,

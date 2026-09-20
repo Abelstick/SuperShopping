@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  Box, Card, Typography, Grid, Skeleton, Chip,
+  Box, Card, Typography, Skeleton, Button,
   ToggleButton, ToggleButtonGroup, useTheme,
 } from '@mui/material'
 import { alpha } from '@mui/material/styles'
 import {
   TrendingUp, Repeat, Category as CategoryIcon, PriceChange,
-  ShoppingBasket,
+  ShoppingBasket, Warning, Schedule, EventBusy,
 } from '@mui/icons-material'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
@@ -14,7 +14,14 @@ import {
 } from 'recharts'
 import { useWorkspaceStore } from '@/features/workspace/store/workspaceStore'
 import { usePurchaseStore } from '@/features/purchases/store/purchaseStore'
-import { ACCENT_KEYS } from '@/shared/constants/accents'
+import LoadErrorBanner from '@/shared/components/LoadErrorBanner'
+import EmptyState from '@/shared/components/EmptyState'
+import { fmtMoney, fmtMonth } from '@/shared/utils/format'
+
+// Tamaños de la pantalla (escala de 4): 48 hero (36 en móvil) · 20 títulos/KPIs · 15 texto · 13 meta
+const FS = { hero: 48, heroXs: 36, title: 20, body: 15, meta: 13 }
+const NUM = { fontVariantNumeric: 'tabular-nums' }
+const reveal = (i) => ({ className: 'reveal', style: { '--i': i } })
 
 const PERIODS = [
   { key: '3m', label: '3 meses', months: 3 },
@@ -44,79 +51,114 @@ function computeCadence(dates) {
 
 // ── Sub-components ──────────────────────────────────────────────────────────
 
-function StatTile({ icon, label, value, sub, accent = 'indigo', loading }) {
-  const theme = useTheme()
-  const color = theme.palette[ACCENT_KEYS[accent]].main
-  if (loading) return <Skeleton variant="rectangular" height={100} sx={{ borderRadius: 2 }} />
+function Panel({ title, caption, icon, children, sx }) {
   return (
-    <Card sx={{ p: 2.5, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-      <Box sx={{ width: 34, height: 34, borderRadius: '10px', bgcolor: alpha(color, 0.12), display: 'flex', alignItems: 'center', justifyContent: 'center', color }}>
-        {icon}
-      </Box>
-      <Box sx={{ minWidth: 0 }}>
-        <Typography variant="h6" fontWeight={800} noWrap sx={{ letterSpacing: '-0.01em', lineHeight: 1.1 }}>
-          {value}
-        </Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.8125rem' }}>
-          {label}
-        </Typography>
-        {sub && (
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25 }}>
-            {sub}
-          </Typography>
+    <Card component="section" sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0, ...sx }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+        {icon && (
+          <Box sx={{ p: 1, bgcolor: 'action.selected', borderRadius: '8px', color: 'primary.main', display: 'flex' }}>{icon}</Box>
         )}
+        <Box>
+          <Typography component="h2" sx={{ fontSize: FS.title, fontWeight: 700, lineHeight: 1.3 }}>{title}</Typography>
+          {caption && <Typography sx={{ fontSize: FS.meta, color: 'text.secondary' }}>{caption}</Typography>}
+        </Box>
       </Box>
+      {children}
     </Card>
   )
 }
 
-function RankBar({ name, value, max, formattedValue, color, sub }) {
+function KpiCard({ icon, label, value, sub, subTone }) {
+  const st = useTheme().palette.stock
+  const subColor = subTone ? st[subTone].text : undefined
+  return (
+    <Card sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'text.secondary' }}>
+        {icon}
+        <Typography component="span" sx={{ fontSize: FS.body, color: 'text.secondary' }}>{label}</Typography>
+      </Box>
+      <Typography sx={{ ...NUM, fontSize: FS.title, fontWeight: 700, lineHeight: 1.3, overflowWrap: 'anywhere' }}>{value}</Typography>
+      {sub && (
+        <Typography sx={{ ...NUM, fontSize: FS.meta, color: subColor || 'text.secondary', fontWeight: subTone ? 700 : 400 }}>{sub}</Typography>
+      )}
+    </Card>
+  )
+}
+
+function RankBar({ name, value, max, formattedValue, color }) {
   const pct = max > 0 ? Math.min((value / max) * 100, 100) : 0
   return (
-    <Box sx={{ mb: 1.75, '&:last-child': { mb: 0 } }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1, mb: 0.5 }}>
-        <Typography variant="body2" fontWeight={500} noWrap sx={{ minWidth: 0 }}>{name}</Typography>
-        <Typography variant="body2" fontWeight={700} sx={{ flexShrink: 0 }}>{formattedValue}</Typography>
+    <Box sx={{ mb: 2, '&:last-child': { mb: 0 } }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 2, mb: 1 }}>
+        <Typography sx={{ fontSize: FS.body, minWidth: 0 }} noWrap>{name}</Typography>
+        <Typography sx={{ ...NUM, fontSize: FS.body, fontWeight: 700, flexShrink: 0, textAlign: 'right' }}>{formattedValue}</Typography>
       </Box>
-      <Box sx={{ height: 6, bgcolor: 'action.hover', borderRadius: 99, overflow: 'hidden' }}>
-        <Box sx={{ height: '100%', width: '100%', transform: `scaleX(${pct / 100})`, transformOrigin: 'left', bgcolor: color, borderRadius: 99, transition: 'transform 0.4s ease' }} />
+      <Box sx={{ height: 8, bgcolor: 'action.hover', borderRadius: '8px', overflow: 'hidden' }}>
+        <Box sx={{ height: '100%', width: '100%', transform: `scaleX(${pct / 100})`, transformOrigin: 'left', bgcolor: color, borderRadius: '8px', transition: 'transform 240ms cubic-bezier(0.22, 1, 0.36, 1)' }} />
       </Box>
-      {sub && <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25 }}>{sub}</Typography>}
+    </Box>
+  )
+}
+
+// Chip de estado: tono + icono + texto (nunca solo color)
+function ToneChip({ tone, Icon, label }) {
+  const theme = useTheme()
+  const st = theme.palette.stock
+  const skin = {
+    agotado: { bg: st.agotado.tint, fg: st.agotado.text, border: st.agotado.line, icon: st.agotado.icon },
+    riesgo: { bg: st.riesgo.tint, fg: st.riesgo.text, border: st.riesgo.line, icon: st.riesgo.icon },
+    brand: { bg: theme.palette.action.selected, fg: theme.palette.primary.main, border: 'transparent', icon: theme.palette.primary.main },
+    neutral: { bg: theme.palette.action.hover, fg: theme.palette.text.primary, border: 'transparent', icon: theme.palette.text.secondary },
+  }[tone]
+  return (
+    <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, px: 1, py: 0.5, borderRadius: '8px', bgcolor: skin.bg, border: 1, borderColor: skin.border, color: skin.fg }}>
+      <Icon sx={{ fontSize: 16, color: skin.icon }} />
+      <Typography component="span" sx={{ ...NUM, fontSize: FS.meta, fontWeight: 700, color: 'inherit', lineHeight: 1.4 }}>{label}</Typography>
     </Box>
   )
 }
 
 function ChartTooltip({ active, payload, label }) {
-  const theme = useTheme()
   if (!active || !payload?.length) return null
   const total = payload.reduce((a, p) => a + (p.value || 0), 0)
   return (
-    <Box sx={{ bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 2, p: 1.5, boxShadow: theme.palette.mode === 'dark' ? '0 8px 24px rgba(0,0,0,0.5)' : '0 8px 24px rgba(0,0,0,0.1)' }}>
-      <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.5 }}>{label}</Typography>
+    <Box sx={{ bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: '8px', p: 1.5, boxShadow: '0 8px 24px rgba(15,23,42,0.16)' }}>
+      <Typography sx={{ fontSize: FS.meta, color: 'text.secondary', mb: 0.5 }}>{fmtMonth(label)}</Typography>
       {payload.filter((p) => p.value > 0).map((p) => (
-        <Box key={p.dataKey} sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.25 }}>
-          <Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: p.fill, flexShrink: 0 }} />
-          <Typography variant="caption" sx={{ flexGrow: 1 }}>{p.dataKey}</Typography>
-          <Typography variant="caption" fontWeight={700}>S/{p.value.toFixed(0)}</Typography>
+        <Box key={p.dataKey} sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+          <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: p.fill, flexShrink: 0 }} />
+          <Typography sx={{ fontSize: FS.meta, flexGrow: 1 }}>{p.dataKey}</Typography>
+          <Typography sx={{ ...NUM, fontSize: FS.meta, fontWeight: 700 }}>{fmtMoney(p.value)}</Typography>
         </Box>
       ))}
-      <Typography variant="subtitle2" fontWeight={700} sx={{ mt: 0.5, pt: 0.5, borderTop: 1, borderColor: 'divider' }}>
-        Total: S/{total.toFixed(0)}
+      <Typography sx={{ ...NUM, fontSize: FS.body, fontWeight: 700, mt: 0.5, pt: 0.5, borderTop: 1, borderColor: 'divider' }}>
+        Total: {fmtMoney(total)}
       </Typography>
     </Box>
   )
 }
 
+const NO_DATA = <Typography sx={{ fontSize: FS.body, color: 'text.secondary' }}>Sin datos suficientes.</Typography>
+
 // ── Page ─────────────────────────────────────────────────────────────────────
 export default function ConsumptionAnalysisPage() {
   const theme = useTheme()
+  const st = theme.palette.stock
   const { currentWorkspace } = useWorkspaceStore()
   const { allItems, fetchAllItems, loading } = usePurchaseStore()
   const [period, setPeriod] = useState(PERIODS[2]) // 12 meses por defecto
+  const [loadError, setLoadError] = useState(null)
+  const [retryTick, setRetryTick] = useState(0)
 
+  // Misma carga de siempre; ahora se recoge el `{ error }` que ya devuelve
   useEffect(() => {
-    if (currentWorkspace) fetchAllItems(currentWorkspace.id)
-  }, [currentWorkspace?.id])
+    if (!currentWorkspace) return
+    let cancelled = false
+    fetchAllItems(currentWorkspace.id)
+      .then((r) => { if (!cancelled) setLoadError(r?.error ? { message: r.error.message || 'Sin detalle del servidor' } : null) })
+      .catch((e) => { if (!cancelled) setLoadError({ message: e?.message || 'Sin detalle del servidor' }) })
+    return () => { cancelled = true }
+  }, [currentWorkspace?.id, retryTick])
 
   const filteredItems = useMemo(() => {
     if (period.months == null) return allItems
@@ -208,217 +250,221 @@ export default function ConsumptionAnalysisPage() {
   const topCategory = categoryData.ranked[0]
   const topVolatile = priceVolatility[0]
   const hasData = allItems.length > 0
+  const showSkeleton = loading && !hasData
+  const failedWithoutData = Boolean(loadError) && !hasData
+  const emptyForPeriod = hasData && !loading && filteredItems.length === 0
+
+  // Un aumento de precio pesa más como gasto: coral sobre 40 %, ámbar sobre 15 %
+  const variationTone = (v) => (v > 40 ? 'agotado' : v > 15 ? 'riesgo' : 'neutral')
+
+  const chartSummary = categoryData.chartData.length
+    ? `Gasto por categoría: ${categoryData.chartData.map((d) => `${fmtMonth(d.month)} ${fmtMoney(Object.entries(d).filter(([k]) => k !== 'month').reduce((a, [, v]) => a + v, 0))}`).join(', ')}`
+    : ''
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-      {/* ── Header ── */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 1.5 }}>
+      {/* ── Header: título + selector de período (esta pantalla es de lectura: no tiene acción primaria) ── */}
+      <Box {...reveal(0)} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
         <Box>
-          <Typography component="h1" variant="h4" fontWeight={800} sx={{ letterSpacing: '-0.02em', mb: 0.25 }}>
+          <Typography component="h1" sx={{ fontSize: FS.title, fontWeight: 800, lineHeight: 1.3, letterSpacing: '-0.01em' }}>
             Análisis de consumo
           </Typography>
-          <Typography variant="body2" color="text.secondary">
+          <Typography sx={{ fontSize: FS.body, color: 'text.secondary' }}>
             Patrones detectados en tu historial de compras
           </Typography>
         </Box>
         <ToggleButtonGroup
-          size="small"
+          aria-label="Período"
+          sx={{ width: { xs: '100%', sm: 'auto' } }}
           value={period.key}
           exclusive
           onChange={(e, key) => key && setPeriod(PERIODS.find((p) => p.key === key))}
         >
           {PERIODS.map((p) => (
-            <ToggleButton key={p.key} value={p.key} sx={{ px: 1.5 }}>{p.label}</ToggleButton>
+            <ToggleButton key={p.key} value={p.key} sx={{ px: { xs: 1, sm: 2 }, flex: { xs: 1, sm: 'none' }, whiteSpace: 'nowrap' }}>{p.label}</ToggleButton>
           ))}
         </ToggleButtonGroup>
       </Box>
 
-      {!hasData && !loading ? (
-        <Card sx={{ px: 2.5, py: 6, textAlign: 'center' }}>
-          <ShoppingBasket sx={{ fontSize: 40, color: 'text.disabled', mb: 1.5 }} />
-          <Typography variant="body1" fontWeight={600} color="text.secondary">Todavía no hay compras registradas</Typography>
-          <Typography variant="body2" color="text.disabled">Los patrones de consumo van a aparecer acá una vez que completes algunas compras.</Typography>
-        </Card>
+      {loadError && (
+        <LoadErrorBanner message={loadError.message} onRetry={() => { setLoadError(null); setRetryTick((t) => t + 1) }} />
+      )}
+
+      {showSkeleton ? (
+        <>
+          <Box sx={{ display: 'grid', gap: 3, gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: 'minmax(0, 5fr) minmax(0, 7fr)' } }}>
+            <Skeleton variant="rectangular" height={144} sx={{ borderRadius: '12px' }} />
+            <Skeleton variant="rectangular" height={144} sx={{ borderRadius: '12px' }} />
+          </Box>
+          <Box sx={{ display: 'grid', gap: 3, gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: 'repeat(2, minmax(0, 1fr))' } }}>
+            <Skeleton variant="rectangular" height={260} sx={{ borderRadius: '12px' }} />
+            <Skeleton variant="rectangular" height={260} sx={{ borderRadius: '12px' }} />
+          </Box>
+          <Skeleton variant="rectangular" height={200} sx={{ borderRadius: '12px' }} />
+        </>
+      ) : failedWithoutData ? null : !hasData ? (
+        <EmptyState
+          icon={<ShoppingBasket sx={{ fontSize: 28 }} />}
+          title="Todavía no hay compras registradas"
+          body="Los patrones de consumo van a aparecer acá una vez que completes algunas compras."
+        />
+      ) : emptyForPeriod ? (
+        <EmptyState
+          icon={<EventBusy sx={{ fontSize: 28 }} />}
+          title="Sin compras en este período"
+          body="Prueba con un período más amplio."
+          action={<Button variant="outlined" onClick={() => setPeriod(PERIODS[3])}>Ver todo</Button>}
+        />
       ) : (
         <>
-          {/* ── KPI row ── */}
-          <Grid container spacing={2}>
-            <Grid size={{ xs: 6, sm: 3 }}>
-              <StatTile
-                icon={<TrendingUp sx={{ fontSize: 18 }} />} accent="emerald" loading={loading}
-                label="Gastado en el período" value={`S/${totalSpend.toLocaleString('es-AR', { maximumFractionDigits: 0 })}`}
-              />
-            </Grid>
-            <Grid size={{ xs: 6, sm: 3 }}>
-              <StatTile
-                icon={<ShoppingBasket sx={{ fontSize: 18 }} />} accent="indigo" loading={loading}
-                label="Productos distintos" value={distinctProducts}
-              />
-            </Grid>
-            <Grid size={{ xs: 6, sm: 3 }}>
-              <StatTile
-                icon={<CategoryIcon sx={{ fontSize: 18 }} />} accent="cyan" loading={loading}
+          {/* ── Nivel 1 y 2: hero + KPIs ── */}
+          <Box {...reveal(1)} sx={{ display: 'grid', gap: { xs: 2, md: 3 }, gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: 'minmax(0, 5fr) minmax(0, 7fr)' } }}>
+            <Card sx={{ bgcolor: st.saludable.tint, borderColor: st.saludable.line, p: 3, display: 'flex', flexDirection: 'column', gap: 1, justifyContent: 'center' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <TrendingUp sx={{ fontSize: 24, color: st.saludable.icon }} />
+                <Typography component="h2" sx={{ fontSize: FS.body, fontWeight: 700 }}>Gastado en el período</Typography>
+              </Box>
+              <Typography sx={{ ...NUM, fontSize: { xs: FS.heroXs, md: FS.hero }, fontWeight: 800, lineHeight: 1.1, letterSpacing: '-0.02em' }}>
+                {fmtMoney(totalSpend)}
+              </Typography>
+            </Card>
+            <Box sx={{ display: 'grid', gap: { xs: 2, md: 3 }, gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))', sm: 'repeat(3, minmax(0, 1fr))' } }}>
+              <KpiCard icon={<ShoppingBasket sx={{ fontSize: 20 }} />} label="Productos distintos" value={distinctProducts} />
+              <KpiCard
+                icon={<CategoryIcon sx={{ fontSize: 20 }} />}
                 label="Categoría con más gasto" value={topCategory ? topCategory.name : '—'}
-                sub={topCategory ? `S/${topCategory.total.toLocaleString('es-AR', { maximumFractionDigits: 0 })}` : null}
+                sub={topCategory ? fmtMoney(topCategory.total) : null}
               />
-            </Grid>
-            <Grid size={{ xs: 6, sm: 3 }}>
-              <StatTile
-                icon={<PriceChange sx={{ fontSize: 18 }} />} accent="amber" loading={loading}
+              <KpiCard
+                icon={<PriceChange sx={{ fontSize: 20 }} />}
                 label="Mayor variación de precio" value={topVolatile ? topVolatile.name : '—'}
                 sub={topVolatile ? `+${Math.round(topVolatile.variation)}%` : null}
+                subTone={topVolatile && variationTone(topVolatile.variation) !== 'neutral' ? variationTone(topVolatile.variation) : undefined}
               />
-            </Grid>
-          </Grid>
+            </Box>
+          </Box>
 
           {/* ── Productos más comprados ── */}
-          <Grid container spacing={2}>
-            <Grid size={{ xs: 12, md: 6 }}>
-              <Card sx={{ p: 2.5 }}>
-                <Typography component="h2" variant="subtitle1" fontWeight={700} sx={{ mb: 0.25 }}>Más frecuentes</Typography>
-                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>Por cantidad de compras</Typography>
-                {byFrequency.length === 0 ? (
-                  <Typography variant="body2" color="text.secondary">Sin datos suficientes.</Typography>
-                ) : byFrequency.map((p) => (
-                  <RankBar
-                    key={p.key} name={p.name} value={p.count} max={maxCount}
-                    formattedValue={`${p.count} compra${p.count !== 1 ? 's' : ''}`}
-                    color={theme.palette.primary.main}
-                  />
-                ))}
-              </Card>
-            </Grid>
-            <Grid size={{ xs: 12, md: 6 }}>
-              <Card sx={{ p: 2.5 }}>
-                <Typography component="h2" variant="subtitle1" fontWeight={700} sx={{ mb: 0.25 }}>Mayor gasto</Typography>
-                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>Por dinero acumulado</Typography>
-                {bySpend.length === 0 ? (
-                  <Typography variant="body2" color="text.secondary">Sin datos suficientes.</Typography>
-                ) : bySpend.map((p) => (
-                  <RankBar
-                    key={p.key} name={p.name} value={p.spend} max={maxSpend}
-                    formattedValue={`S/${p.spend.toLocaleString('es-AR', { maximumFractionDigits: 0 })}`}
-                    color={theme.palette.success.main}
-                  />
-                ))}
-              </Card>
-            </Grid>
-          </Grid>
+          <Box {...reveal(2)} sx={{ display: 'grid', gap: 3, gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: 'repeat(2, minmax(0, 1fr))' } }}>
+            <Panel title="Más frecuentes" caption="Por cantidad de compras">
+              {byFrequency.length === 0 ? NO_DATA : (
+                <Box>
+                  {byFrequency.map((p) => (
+                    <RankBar
+                      key={p.key} name={p.name} value={p.count} max={maxCount}
+                      formattedValue={`${p.count} compra${p.count !== 1 ? 's' : ''}`}
+                      color={theme.palette.primary.main}
+                    />
+                  ))}
+                </Box>
+              )}
+            </Panel>
+            <Panel title="Mayor gasto" caption="Por dinero acumulado">
+              {bySpend.length === 0 ? NO_DATA : (
+                <Box>
+                  {bySpend.map((p) => (
+                    <RankBar
+                      key={p.key} name={p.name} value={p.spend} max={maxSpend}
+                      formattedValue={fmtMoney(p.spend)}
+                      color={theme.palette.primary.main}
+                    />
+                  ))}
+                </Box>
+              )}
+            </Panel>
+          </Box>
 
           {/* ── Frecuencia de recompra ── */}
-          <Card sx={{ p: 2.5 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-              <Box sx={{ p: 0.75, bgcolor: alpha(theme.palette.info.main, 0.12), borderRadius: '8px', color: theme.palette.info.main, display: 'flex' }}>
-                <Repeat sx={{ fontSize: 16 }} />
-              </Box>
-              <Box>
-                <Typography component="h2" variant="subtitle1" fontWeight={700} sx={{ lineHeight: 1.2 }}>Cuándo vas a reponer</Typography>
-                <Typography variant="caption" color="text.secondary">Según el intervalo promedio entre tus compras</Typography>
-              </Box>
-            </Box>
-            {cadenceList.length === 0 ? (
-              <Typography variant="body2" color="text.secondary">Comprá el mismo producto al menos dos veces para ver su frecuencia.</Typography>
-            ) : (
-              <Grid container spacing={1.5}>
-                {cadenceList.map((p) => {
-                  const { avgDays, nextEstimate } = p.cadence
-                  const overdue = nextEstimate < 0
-                  const dueText = nextEstimate === 0 ? 'Hoy' : nextEstimate === 1 ? 'Mañana'
-                    : overdue ? `Hace ${Math.abs(nextEstimate)}d` : `En ${nextEstimate}d`
-                  return (
-                    <Grid size={{ xs: 12, sm: 6, md: 3 }} key={p.key}>
-                      <Box sx={{ p: 1.5, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
-                        <Typography variant="body2" fontWeight={600} noWrap>{p.name}</Typography>
-                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.75 }}>
-                          Cada ~{avgDays} días
-                        </Typography>
-                        <Chip
-                          size="small"
-                          label={dueText}
-                          color={overdue ? 'error' : nextEstimate <= 2 ? 'warning' : 'default'}
-                          sx={{ height: 20, fontSize: '0.6875rem' }}
-                        />
+          <Box {...reveal(3)}>
+            <Panel title="Cuándo vas a reponer" caption="Según el intervalo promedio entre tus compras" icon={<Repeat sx={{ fontSize: 20 }} />}>
+              {cadenceList.length === 0 ? (
+                <Typography sx={{ fontSize: FS.body, color: 'text.secondary' }}>Comprá el mismo producto al menos dos veces para ver su frecuencia.</Typography>
+              ) : (
+                <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: 'minmax(0, 1fr)', sm: 'repeat(2, minmax(0, 1fr))', md: 'repeat(4, minmax(0, 1fr))' } }}>
+                  {cadenceList.map((p) => {
+                    const { avgDays, nextEstimate } = p.cadence
+                    const overdue = nextEstimate < 0
+                    const dueText = nextEstimate === 0 ? 'Hoy' : nextEstimate === 1 ? 'Mañana'
+                      : overdue ? `Hace ${Math.abs(nextEstimate)}d` : `En ${nextEstimate}d`
+                    const tone = overdue ? 'riesgo' : nextEstimate <= 2 ? 'brand' : 'neutral'
+                    return (
+                      <Box key={p.key} sx={{ p: 2, borderRadius: '8px', border: 1, borderColor: 'divider', display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
+                        <Typography sx={{ fontSize: FS.body, fontWeight: 700 }} noWrap>{p.name}</Typography>
+                        <Typography sx={{ ...NUM, fontSize: FS.meta, color: 'text.secondary' }}>Cada ~{avgDays} días</Typography>
+                        <Box><ToneChip tone={tone} Icon={overdue ? Warning : Schedule} label={dueText} /></Box>
                       </Box>
-                    </Grid>
-                  )
-                })}
-              </Grid>
-            )}
-          </Card>
+                    )
+                  })}
+                </Box>
+              )}
+            </Panel>
+          </Box>
 
           {/* ── Gasto por categoría ── */}
-          <Grid container spacing={2}>
-            <Grid size={{ xs: 12, md: 7 }}>
-              <Card sx={{ p: 2.5 }}>
-                <Typography component="h2" variant="subtitle1" fontWeight={700} sx={{ mb: 0.25 }}>Gasto por categoría</Typography>
-                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>Últimos {categoryData.chartData.length} meses</Typography>
-                {categoryData.chartData.length === 0 ? (
-                  <Typography variant="body2" color="text.secondary">Sin datos suficientes.</Typography>
-                ) : (
-                  <ResponsiveContainer width="100%" height={220}>
-                    <BarChart data={categoryData.chartData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.divider} vertical={false} />
-                      <XAxis dataKey="month" tick={{ fontSize: 10, fill: theme.palette.text.secondary }} tickLine={false} axisLine={false} />
-                      <YAxis tick={{ fontSize: 10, fill: theme.palette.text.secondary }} tickLine={false} axisLine={false} tickFormatter={(v) => `S/${v}`} />
-                      <RechartTooltip content={<ChartTooltip />} cursor={{ fill: alpha(theme.palette.text.primary, 0.04) }} />
-                      {categoryData.chartCategories.map((c) => (
-                        <Bar key={c.name} dataKey={c.name} stackId="cat" fill={c.color} radius={[0, 0, 0, 0]} />
-                      ))}
-                    </BarChart>
-                  </ResponsiveContainer>
-                )}
-              </Card>
-            </Grid>
-            <Grid size={{ xs: 12, md: 5 }}>
-              <Card sx={{ p: 2.5 }}>
-                <Typography component="h2" variant="subtitle1" fontWeight={700} sx={{ mb: 2 }}>Ranking de categorías</Typography>
-                {categoryData.ranked.length === 0 ? (
-                  <Typography variant="body2" color="text.secondary">Sin datos suficientes.</Typography>
-                ) : categoryData.ranked.map((c) => (
-                  <RankBar
-                    key={c.name} name={c.name} value={c.total} max={categoryData.ranked[0].total}
-                    formattedValue={`S/${c.total.toLocaleString('es-AR', { maximumFractionDigits: 0 })}`}
-                    color={c.color}
-                  />
-                ))}
-              </Card>
-            </Grid>
-          </Grid>
+          <Box {...reveal(4)} sx={{ display: 'grid', gap: 3, gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: 'minmax(0, 7fr) minmax(0, 5fr)' } }}>
+            <Panel title="Gasto por categoría" caption={`Últimos ${categoryData.chartData.length} meses`}>
+              {categoryData.chartData.length === 0 ? NO_DATA : (
+                <>
+                  <Box role="img" aria-label={chartSummary}>
+                    <ResponsiveContainer width="100%" height={240}>
+                      <BarChart data={categoryData.chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="2 4" stroke={theme.palette.divider} vertical={false} />
+                        <XAxis dataKey="month" tickMargin={8} tickFormatter={fmtMonth} tick={{ fontSize: FS.meta, fill: theme.palette.text.secondary }} tickLine={false} axisLine={false} />
+                        <YAxis width={72} tick={{ fontSize: FS.meta, fill: theme.palette.text.secondary }} tickLine={false} axisLine={false} tickFormatter={(v) => `S/ ${Number(v).toLocaleString('en-US')}`} />
+                        <RechartTooltip content={<ChartTooltip />} cursor={{ fill: alpha(theme.palette.text.primary, 0.04) }} />
+                        {categoryData.chartCategories.map((c) => (
+                          <Bar key={c.name} dataKey={c.name} stackId="cat" fill={c.color} radius={[0, 0, 0, 0]} isAnimationActive={false} />
+                        ))}
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </Box>
+                  {/* Leyenda visible: el color no es el único portador de la categoría */}
+                  <Box component="ul" sx={{ m: 0, p: 0, listStyle: 'none', display: 'flex', flexWrap: 'wrap', columnGap: 3, rowGap: 1 }}>
+                    {categoryData.chartCategories.map((c) => (
+                      <Box component="li" key={c.name} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Box sx={{ width: 12, height: 12, borderRadius: '4px', bgcolor: c.color, flexShrink: 0 }} />
+                        <Typography component="span" sx={{ fontSize: FS.meta }}>{c.name}</Typography>
+                      </Box>
+                    ))}
+                  </Box>
+                </>
+              )}
+            </Panel>
+            <Panel title="Ranking de categorías">
+              {categoryData.ranked.length === 0 ? NO_DATA : (
+                <Box>
+                  {categoryData.ranked.map((c) => (
+                    <RankBar
+                      key={c.name} name={c.name} value={c.total} max={categoryData.ranked[0].total}
+                      formattedValue={fmtMoney(c.total)}
+                      color={c.color}
+                    />
+                  ))}
+                </Box>
+              )}
+            </Panel>
+          </Box>
 
           {/* ── Variación de precios ── */}
-          <Card sx={{ p: 2.5 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-              <Box sx={{ p: 0.75, bgcolor: alpha(theme.palette.warning.main, 0.12), borderRadius: '8px', color: theme.palette.warning.main, display: 'flex' }}>
-                <PriceChange sx={{ fontSize: 16 }} />
-              </Box>
-              <Box>
-                <Typography component="h2" variant="subtitle1" fontWeight={700} sx={{ lineHeight: 1.2 }}>Variación de precios</Typography>
-                <Typography variant="caption" color="text.secondary">Productos cuyo precio cambió más entre compras</Typography>
-              </Box>
-            </Box>
-            {priceVolatility.length === 0 ? (
-              <Typography variant="body2" color="text.secondary">Sin variaciones de precio detectadas todavía.</Typography>
-            ) : (
-              <Grid container spacing={1.5}>
-                {priceVolatility.map((p) => (
-                  <Grid size={{ xs: 12, sm: 6, md: 3 }} key={p.key}>
-                    <Box sx={{ p: 1.5, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
-                      <Typography variant="body2" fontWeight={600} noWrap>{p.name}</Typography>
-                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.75 }}>
-                        S/{p.min.toFixed(2)} – S/{p.max.toFixed(2)}
+          <Box {...reveal(5)}>
+            <Panel title="Variación de precios" caption="Productos cuyo precio cambió más entre compras" icon={<PriceChange sx={{ fontSize: 20 }} />}>
+              {priceVolatility.length === 0 ? (
+                <Typography sx={{ fontSize: FS.body, color: 'text.secondary' }}>Sin variaciones de precio detectadas todavía.</Typography>
+              ) : (
+                <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: 'minmax(0, 1fr)', sm: 'repeat(2, minmax(0, 1fr))', md: 'repeat(4, minmax(0, 1fr))' } }}>
+                  {priceVolatility.map((p) => (
+                    <Box key={p.key} sx={{ p: 2, borderRadius: '8px', border: 1, borderColor: 'divider', display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
+                      <Typography sx={{ fontSize: FS.body, fontWeight: 700 }} noWrap>{p.name}</Typography>
+                      <Typography sx={{ ...NUM, fontSize: FS.meta, color: 'text.secondary' }}>
+                        {fmtMoney(p.min)} – {fmtMoney(p.max)}
                       </Typography>
-                      <Chip
-                        size="small"
-                        label={`+${Math.round(p.variation)}%`}
-                        color={p.variation > 40 ? 'error' : p.variation > 15 ? 'warning' : 'default'}
-                        sx={{ height: 20, fontSize: '0.6875rem' }}
-                      />
+                      <Box><ToneChip tone={variationTone(p.variation)} Icon={TrendingUp} label={`+${Math.round(p.variation)}%`} /></Box>
                     </Box>
-                  </Grid>
-                ))}
-              </Grid>
-            )}
-          </Card>
+                  ))}
+                </Box>
+              )}
+            </Panel>
+          </Box>
         </>
       )}
     </Box>

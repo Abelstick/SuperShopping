@@ -1,17 +1,25 @@
 import { useEffect, useState } from 'react'
 import {
-  Box, Typography, Card, Avatar, Chip, IconButton, Button,
+  Box, Typography, Card, IconButton, Button,
   Dialog, DialogTitle, DialogContent, DialogActions,
-  Skeleton, Divider, Tooltip,
+  Skeleton, Divider, CircularProgress, useTheme,
 } from '@mui/material'
 import {
-  Receipt, Delete, Visibility, CalendarToday, Person, Store, FileDownloadOutlined,
+  Receipt, Delete, Visibility, CalendarToday, Person, Store, FileDownloadOutlined, Warning,
 } from '@mui/icons-material'
 import { useNavigate } from 'react-router-dom'
 import { useSnackbar } from 'notistack'
 import { useWorkspaceStore } from '@/features/workspace/store/workspaceStore'
 import { usePurchaseStore } from '../store/purchaseStore'
 import { useAppStore } from '@/store/appStore'
+import LoadErrorBanner from '@/shared/components/LoadErrorBanner'
+import EmptyState from '@/shared/components/EmptyState'
+import { fmtMoney, fmtDate, parseDay } from '@/shared/utils/format'
+
+// Tamaños de la pantalla (escala de 4): 48 hero (36 en móvil) · 20 títulos/KPIs · 15 texto · 13 meta
+const FS = { hero: 48, heroXs: 36, title: 20, body: 15, meta: 13 }
+const NUM = { fontVariantNumeric: 'tabular-nums' }
+const reveal = (i) => ({ className: 'reveal', style: { '--i': i } })
 
 function exportPurchasesCSV(purchases) {
   const header = ['Fecha', 'Nombre', 'Tienda', 'Total (S/)', 'Presupuesto', 'Ejecutado por']
@@ -39,7 +47,7 @@ function groupByMonth(purchases) {
   const groups = {}
   purchases.forEach((p) => {
     const key = p.date
-      ? new Date(p.date).toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })
+      ? parseDay(p.date).toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })
       : 'Sin fecha'
     if (!groups[key]) groups[key] = []
     groups[key].push(p)
@@ -47,94 +55,86 @@ function groupByMonth(purchases) {
   return groups
 }
 
+// ── Nivel 1: dato hero ───────────────────────────────────────────────────────
+function TotalHero({ total }) {
+  const st = useTheme().palette.stock.saludable
+  return (
+    <Card sx={{ bgcolor: st.tint, borderColor: st.line, p: 3, display: 'flex', alignItems: 'center', gap: 2 }}>
+      <Receipt sx={{ fontSize: 32, color: st.icon }} />
+      <Typography sx={{ ...NUM, fontSize: { xs: FS.heroXs, md: FS.hero }, fontWeight: 800, lineHeight: 1.1, letterSpacing: '-0.02em' }}>
+        {fmtMoney(total)}
+        <Box component="span" sx={{ fontSize: FS.title, fontWeight: 700, ml: 1 }}>en total</Box>
+      </Typography>
+    </Card>
+  )
+}
+
+// ── Fila de compra ───────────────────────────────────────────────────────────
 function PurchaseRow({ purchase, isOwner, onView, onDelete }) {
+  const st = useTheme().palette.stock.riesgo
+  const openOnKey = (e) => {
+    if (e.target !== e.currentTarget) return
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onView() }
+  }
+
   return (
     <Box
-      sx={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 2,
-        px: 2.5,
-        py: 1.75,
-        cursor: 'pointer',
-        transition: 'background 0.1s',
-        '&:hover': { bgcolor: 'action.hover' },
-      }}
+      role="link"
+      tabIndex={0}
+      aria-label={`Abrir compra ${purchase.name}`}
+      onKeyDown={openOnKey}
+      sx={{ display: 'flex', alignItems: 'center', gap: 2, px: 3, py: 1, minHeight: 80, cursor: 'pointer', transition: 'background-color 140ms', '&:hover': { bgcolor: 'action.hover' } }}
       onClick={onView}
     >
-      <Avatar
-        sx={{
-          width: 38,
-          height: 38,
-          bgcolor: 'rgba(99,102,241,0.12)',
-          color: 'primary.main',
-          flexShrink: 0,
-        }}
-      >
-        <Receipt sx={{ fontSize: 18 }} />
-      </Avatar>
+      <Box sx={{ width: 40, height: 40, borderRadius: '8px', bgcolor: 'action.selected', color: 'primary.main', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        <Receipt sx={{ fontSize: 20 }} />
+      </Box>
 
       <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-        <Typography variant="body2" fontWeight={700} noWrap>
-          {purchase.name}
-        </Typography>
-        <Box sx={{ display: 'flex', gap: 1.5, mt: 0.4, flexWrap: 'wrap' }}>
+        <Typography sx={{ fontSize: FS.body, fontWeight: 700 }} noWrap>{purchase.name}</Typography>
+        <Box sx={{ display: 'flex', columnGap: 2, rowGap: 0.5, mt: 0.5, flexWrap: 'wrap', alignItems: 'center' }}>
           {purchase.store && (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.4 }}>
-              <Store sx={{ fontSize: 12, color: 'text.disabled' }} />
-              <Typography variant="caption" color="text.secondary">{purchase.store}</Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <Store sx={{ fontSize: 16, color: 'text.secondary' }} />
+              <Typography sx={{ fontSize: FS.meta, color: 'text.secondary' }}>{purchase.store}</Typography>
             </Box>
           )}
           {purchase.date && (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.4 }}>
-              <CalendarToday sx={{ fontSize: 12, color: 'text.disabled' }} />
-              <Typography variant="caption" color="text.secondary">
-                {new Date(purchase.date).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })}
-              </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <CalendarToday sx={{ fontSize: 16, color: 'text.secondary' }} />
+              <Typography sx={{ ...NUM, fontSize: FS.meta, color: 'text.secondary' }}>{fmtDate(purchase.date)}</Typography>
             </Box>
           )}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.4 }}>
-            <Person sx={{ fontSize: 12, color: 'text.disabled' }} />
-            <Typography variant="caption" color="text.secondary">
-              {purchase.profiles?.full_name || '—'}
-            </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <Person sx={{ fontSize: 16, color: 'text.secondary' }} />
+            <Typography sx={{ fontSize: FS.meta, color: 'text.secondary' }}>{purchase.profiles?.full_name || '—'}</Typography>
           </Box>
           {purchase.budgets && (
-            <Chip
-              size="small"
-              label={purchase.budgets.name}
-              sx={{
-                height: 18,
-                fontSize: '0.625rem',
-                bgcolor: 'rgba(99,102,241,0.1)',
-                color: 'primary.main',
-                fontWeight: 600,
-                border: '1px solid rgba(99,102,241,0.2)',
-              }}
-            />
+            <Box sx={{ px: 1, py: 0.5, borderRadius: '8px', bgcolor: 'action.selected', color: 'primary.main' }}>
+              <Typography component="span" sx={{ fontSize: FS.meta, fontWeight: 700, color: 'inherit', lineHeight: 1.4 }}>{purchase.budgets.name}</Typography>
+            </Box>
           )}
         </Box>
       </Box>
 
       <Box sx={{ textAlign: 'right', flexShrink: 0 }}>
         {purchase.total_amount > 0 ? (
-          <Typography variant="subtitle2" fontWeight={800} color="primary.main">
-            S/{purchase.total_amount.toFixed(2)}
-          </Typography>
+          <Typography sx={{ ...NUM, fontSize: FS.body, fontWeight: 700 }}>{fmtMoney(purchase.total_amount)}</Typography>
         ) : (
-          <Typography variant="caption" color="warning.main" fontWeight={600}>
-            Ver detalle
-          </Typography>
+          <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, px: 1, py: 0.5, borderRadius: '8px', bgcolor: st.tint, border: 1, borderColor: st.line, color: st.text }}>
+            <Warning sx={{ fontSize: 16, color: st.icon }} />
+            <Typography component="span" sx={{ fontSize: FS.meta, fontWeight: 700, color: 'inherit', lineHeight: 1.4 }}>Ver detalle</Typography>
+          </Box>
         )}
       </Box>
 
-      <Box sx={{ display: 'flex', gap: 0.25, flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
-        <IconButton size="small" onClick={onView}>
-          <Visibility sx={{ fontSize: 17 }} />
+      <Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
+        <IconButton aria-label={`Ver compra ${purchase.name}`} onClick={onView}>
+          <Visibility sx={{ fontSize: 20 }} />
         </IconButton>
         {isOwner && (
-          <IconButton size="small" color="error" onClick={onDelete}>
-            <Delete sx={{ fontSize: 17 }} />
+          <IconButton aria-label={`Eliminar compra ${purchase.name}`} onClick={onDelete}>
+            <Delete sx={{ fontSize: 20 }} />
           </IconButton>
         )}
       </Box>
@@ -149,120 +149,133 @@ export default function PurchasesPage() {
   const { refreshSignal } = useAppStore()
   const { enqueueSnackbar } = useSnackbar()
   const [deleteConfirm, setDeleteConfirm] = useState(null)
+  const [deleting, setDeleting] = useState(false)
+  const [loadError, setLoadError] = useState(null)
+  const [retryTick, setRetryTick] = useState(0)
 
+  // Misma carga de siempre; ahora se recoge el `{ error }` que ya devuelve
   useEffect(() => {
-    if (currentWorkspace) fetchPurchases(currentWorkspace.id)
-  }, [currentWorkspace?.id, refreshSignal])
+    if (!currentWorkspace) return
+    let cancelled = false
+    fetchPurchases(currentWorkspace.id)
+      .then((r) => { if (!cancelled) setLoadError(r?.error ? { message: r.error.message || 'Sin detalle del servidor' } : null) })
+      .catch((e) => { if (!cancelled) setLoadError({ message: e?.message || 'Sin detalle del servidor' }) })
+    return () => { cancelled = true }
+  }, [currentWorkspace?.id, refreshSignal, retryTick])
 
   const handleDelete = async () => {
+    setDeleting(true)
     const { error } = await deletePurchase(deleteConfirm.id)
+    setDeleting(false)
     if (error) enqueueSnackbar('Error al eliminar', { variant: 'error' })
     else enqueueSnackbar('Compra eliminada', { variant: 'success' })
     setDeleteConfirm(null)
   }
 
   const isOwner = currentWorkspace?.my_role === 'owner'
-  const groups  = groupByMonth(purchases)
+  const groups = groupByMonth(purchases)
   const totalSpent = purchases.reduce((a, p) => a + (p.total_amount || 0), 0)
+  const showSkeleton = loading && purchases.length === 0
+  const failedWithoutData = Boolean(loadError) && purchases.length === 0
 
   return (
-    <Box>
-      {/* Header */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 3 }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+      {/* Header: título + acción secundaria (esta pantalla no tiene acción primaria) */}
+      <Box {...reveal(0)} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
         <Box>
-          <Typography variant="h4" fontWeight={800} sx={{ letterSpacing: '-0.02em' }}>
-            Historial de compras
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
+          <Typography component="h1" sx={{ fontSize: FS.title, fontWeight: 800, lineHeight: 1.3, letterSpacing: '-0.01em' }}>Historial de compras</Typography>
+          <Typography sx={{ ...NUM, fontSize: FS.body, color: 'text.secondary' }}>
             {purchases.length} compra{purchases.length !== 1 ? 's' : ''}
-            {purchases.length > 0 && (
-              <Box component="span" sx={{ color: 'primary.main', fontWeight: 600, ml: 1 }}>
-                · S/{totalSpent.toFixed(2)} en total
-              </Box>
-            )}
           </Typography>
         </Box>
         {purchases.length > 0 && (
-          <Tooltip title="Exportar historial como CSV">
-            <IconButton onClick={() => exportPurchasesCSV(purchases)} size="small">
-              <FileDownloadOutlined />
-            </IconButton>
-          </Tooltip>
+          <Button variant="outlined" startIcon={<FileDownloadOutlined />} onClick={() => exportPurchasesCSV(purchases)}>
+            Exportar historial como CSV
+          </Button>
         )}
       </Box>
 
-      {loading ? (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-          {[1, 2, 3, 4].map((i) => (
-            <Skeleton key={i} height={72} sx={{ borderRadius: 2 }} />
-          ))}
-        </Box>
-      ) : purchases.length === 0 ? (
-        <Box
-          sx={{
-            textAlign: 'center',
-            py: 8,
-            border: '1px dashed',
-            borderColor: 'divider',
-            borderRadius: 3,
-          }}
-        >
-          <Receipt sx={{ fontSize: 52, color: 'text.disabled', mb: 1.5 }} />
-          <Typography variant="h6" fontWeight={600} color="text.secondary" gutterBottom>
-            Sin compras registradas
-          </Typography>
-          <Typography variant="body2" color="text.disabled">
-            Las compras realizadas en modo shopping aparecerán aquí
-          </Typography>
-        </Box>
-      ) : (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-          {Object.entries(groups).map(([month, items]) => (
-            <Box key={month}>
-              {/* Month header */}
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1.5 }}>
-                <Typography
-                  variant="overline"
-                  color="text.secondary"
-                  sx={{ fontWeight: 700, textTransform: 'capitalize' }}
-                >
-                  {month}
-                </Typography>
-                <Box sx={{ flexGrow: 1, height: 1, bgcolor: 'divider' }} />
-                <Typography variant="caption" color="text.secondary" fontWeight={600}>
-                  S/{items.reduce((a, p) => a + (p.total_amount || 0), 0).toFixed(2)}
-                </Typography>
-              </Box>
-
-              {/* Purchase cards */}
-              <Card sx={{ overflow: 'hidden' }}>
-                {items.map((p, i) => (
-                  <Box key={p.id}>
-                    <PurchaseRow
-                      purchase={p}
-                      isOwner={isOwner}
-                      onView={() => navigate(`/purchases/${p.id}`)}
-                      onDelete={() => setDeleteConfirm(p)}
-                    />
-                    {i < items.length - 1 && <Divider sx={{ mx: 2.5 }} />}
-                  </Box>
-                ))}
-              </Card>
-            </Box>
-          ))}
-        </Box>
+      {loadError && (
+        <LoadErrorBanner message={loadError.message} onRetry={() => { setLoadError(null); setRetryTick((t) => t + 1) }} />
       )}
 
-      <Dialog open={Boolean(deleteConfirm)} onClose={() => setDeleteConfirm(null)}>
-        <DialogTitle>Eliminar compra</DialogTitle>
+      {/* Nivel 1: dato hero */}
+      {showSkeleton && <Skeleton variant="rectangular" height={112} sx={{ borderRadius: '12px' }} />}
+      {purchases.length > 0 && <Box {...reveal(1)}><TotalHero total={totalSpent} /></Box>}
+
+      {/* Contenido */}
+      <Box {...reveal(2)}>
+        {showSkeleton ? (
+          <Card>
+            {[1, 2, 3, 4].map((i) => (
+              <Box key={i} sx={{ display: 'flex', alignItems: 'center', gap: 2, px: 3, minHeight: 80 }}>
+                <Skeleton variant="rectangular" width={40} height={40} />
+                <Box sx={{ flexGrow: 1 }}>
+                  <Skeleton variant="text" width="45%" sx={{ fontSize: FS.body }} />
+                  <Skeleton variant="text" width="30%" sx={{ fontSize: FS.meta }} />
+                </Box>
+                <Skeleton variant="text" width={72} sx={{ fontSize: FS.body }} />
+              </Box>
+            ))}
+          </Card>
+        ) : failedWithoutData ? null : purchases.length === 0 ? (
+          <EmptyState
+            icon={<Receipt sx={{ fontSize: 28 }} />}
+            title="Sin compras registradas"
+            body="Las compras realizadas en modo shopping aparecerán aquí"
+          />
+        ) : (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {Object.entries(groups).map(([month, items]) => (
+              <Box component="section" key={month}>
+                {/* Cabecera del mes: nombre + cantidad + total del mes */}
+                <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1, mb: 2 }}>
+                  <Typography component="h2" sx={{ fontSize: FS.title, fontWeight: 700, lineHeight: 1.3, '&::first-letter': { textTransform: 'uppercase' } }}>{month}</Typography>
+                  <Typography sx={{ ...NUM, fontSize: FS.body, color: 'text.secondary' }}>{items.length}</Typography>
+                  <Typography sx={{ ...NUM, fontSize: FS.body, fontWeight: 700, ml: 'auto' }}>
+                    {fmtMoney(items.reduce((a, p) => a + (p.total_amount || 0), 0))}
+                  </Typography>
+                </Box>
+
+                <Card sx={{ overflow: 'hidden' }}>
+                  {items.map((p, i) => (
+                    <Box key={p.id}>
+                      <PurchaseRow
+                        purchase={p}
+                        isOwner={isOwner}
+                        onView={() => navigate(`/purchases/${p.id}`)}
+                        onDelete={() => setDeleteConfirm(p)}
+                      />
+                      {i < items.length - 1 && <Divider sx={{ mx: 3 }} />}
+                    </Box>
+                  ))}
+                </Card>
+              </Box>
+            ))}
+          </Box>
+        )}
+      </Box>
+
+      <Dialog open={Boolean(deleteConfirm)} onClose={deleting ? undefined : () => setDeleteConfirm(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Box sx={{ p: 1, bgcolor: 'error.main', borderRadius: '8px', color: 'error.contrastText', display: 'flex' }}>
+              <Delete sx={{ fontSize: 24 }} />
+            </Box>
+            Eliminar compra
+          </Box>
+        </DialogTitle>
         <DialogContent>
-          <Typography>
+          <Typography sx={{ fontSize: FS.body }}>
             ¿Eliminar <strong>"{deleteConfirm?.name}"</strong>? Esta acción no se puede deshacer.
           </Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setDeleteConfirm(null)}>Cancelar</Button>
-          <Button variant="contained" color="error" onClick={handleDelete}>Eliminar</Button>
+          <Button onClick={() => setDeleteConfirm(null)} disabled={deleting}>Cancelar</Button>
+          <Button variant="contained" color="error" onClick={handleDelete} disabled={deleting}
+            startIcon={deleting ? <CircularProgress size={16} color="inherit" /> : undefined}>
+            Eliminar
+          </Button>
         </DialogActions>
       </Dialog>
     </Box>

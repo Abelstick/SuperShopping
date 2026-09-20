@@ -1,47 +1,76 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   Dialog, DialogTitle, DialogContent, DialogActions, Button,
-  TextField, Box, Typography, InputAdornment,
+  TextField, Box, Typography, InputAdornment, CircularProgress, useTheme,
 } from '@mui/material'
+import { TrendingUp, TrendingDown } from '@mui/icons-material'
+import { fmtMoney } from '@/shared/utils/format'
+
+// Tamaños: 20 título · 15 texto · 13 meta
+const FS = { title: 20, body: 15, meta: 13 }
+const validate = (v) => (v !== '' && Number(v) < 0 ? 'El total no puede ser negativo.' : '')
 
 export default function AdjustTotalDialog({ open, itemsSubtotal, initialTotal, saving, title, confirmLabel, onConfirm, onClose }) {
+  const st = useTheme().palette.stock
   const [value, setValue] = useState('')
+  const [error, setError] = useState('')
+  const inputRef = useRef(null)
 
   useEffect(() => {
-    if (open) setValue(String(initialTotal ?? itemsSubtotal ?? ''))
+    if (open) {
+      setValue(String(initialTotal ?? itemsSubtotal ?? ''))
+      setError('')
+    }
   }, [open, initialTotal, itemsSubtotal])
 
   const total = Number(value || 0)
   const diff = total - itemsSubtotal
   const showDiff = value !== '' && Math.abs(diff) > 0.009
 
+  const handleConfirm = () => {
+    const err = validate(value)
+    setError(err)
+    if (err) { inputRef.current?.focus(); return }
+    onConfirm(total)
+  }
+
+  // Más caro que la suma = coral (sale más capital); más barato = neutro con signo (no es un flujo positivo)
+  const DiffIcon = diff > 0 ? TrendingUp : TrendingDown
+  const diffColor = diff > 0 ? st.agotado.text : 'text.secondary'
+
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth slotProps={{ paper: { sx: { borderRadius: 3 } } }}>
-      <DialogTitle sx={{ pb: 1 }}>
-        <Typography variant="h6" fontWeight={700}>{title}</Typography>
-        <Typography variant="caption" color="text.secondary">
+    <Dialog open={open} onClose={saving ? undefined : onClose} maxWidth="xs" fullWidth>
+      <DialogTitle>
+        <Typography component="span" sx={{ display: 'block', fontSize: FS.title, fontWeight: 700, lineHeight: 1.3 }}>{title}</Typography>
+        <Typography component="span" sx={{ display: 'block', fontSize: FS.meta, fontWeight: 400, color: 'text.secondary', mt: 0.5 }}>
           El precio en caja a veces no coincide con el de góndola — ajustá el total si hace falta.
         </Typography>
       </DialogTitle>
       <DialogContent>
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', p: 1.5, bgcolor: 'action.hover', borderRadius: 2, mb: 2, mt: 0.5 }}>
-          <Typography variant="body2" color="text.secondary">Suma de productos</Typography>
-          <Typography variant="subtitle1" fontWeight={700}>S/{itemsSubtotal.toFixed(2)}</Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, p: 2, bgcolor: 'action.hover', borderRadius: '8px', my: 2 }}>
+          <Typography sx={{ fontSize: FS.body, color: 'text.secondary' }}>Suma de productos</Typography>
+          <Typography sx={{ fontSize: FS.body, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{fmtMoney(itemsSubtotal)}</Typography>
         </Box>
         <TextField
           fullWidth autoFocus type="number" label="Total pagado (boleta)"
           value={value} onChange={(e) => setValue(e.target.value)}
-          slotProps={{ input: { startAdornment: <InputAdornment position="start">S/</InputAdornment> }, htmlInput: { min: 0, step: 0.01 } }}
+          onBlur={() => setError(validate(value))}
+          error={Boolean(error)}
+          helperText={error || ' '}
+          inputRef={inputRef}
+          slotProps={{ input: { startAdornment: <InputAdornment position="start">S/</InputAdornment> }, htmlInput: { min: 0, step: 0.01, inputMode: 'decimal' } }}
         />
         {showDiff && (
-          <Typography variant="caption" sx={{ display: 'block', mt: 1 }} color={diff > 0 ? 'error.main' : 'success.main'}>
-            Ajuste: {diff > 0 ? '+' : ''}S/{diff.toFixed(2)} ({diff > 0 ? 'más caro' : 'más barato'} que la suma de productos)
+          <Typography sx={{ display: 'flex', alignItems: 'center', gap: 1, fontSize: FS.body, fontWeight: 600, color: diffColor, fontVariantNumeric: 'tabular-nums' }}>
+            <DiffIcon sx={{ fontSize: 20 }} />
+            Ajuste: {diff > 0 ? '+ ' : ''}{fmtMoney(diff)} ({diff > 0 ? 'más caro' : 'más barato'} que la suma de productos)
           </Typography>
         )}
       </DialogContent>
-      <DialogActions sx={{ px: 3, pb: 3 }}>
-        <Button onClick={onClose} color="inherit">Cancelar</Button>
-        <Button variant="contained" onClick={() => onConfirm(total)} disabled={saving || value === ''} fullWidth>
+      <DialogActions>
+        <Button onClick={onClose} disabled={saving} color="inherit" sx={{ color: 'text.secondary' }}>Cancelar</Button>
+        <Button variant="contained" onClick={handleConfirm} disabled={saving || value === ''}
+          startIcon={saving ? <CircularProgress size={16} color="inherit" /> : undefined} sx={{ flexGrow: 1 }}>
           {saving ? 'Guardando…' : confirmLabel}
         </Button>
       </DialogActions>

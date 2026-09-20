@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  Box, Grid, Card, Typography, Avatar, Chip, Skeleton, Divider, Stack,
-  List, ListItem, ListItemText, useTheme, Button,
+  Box, Card, Typography, Avatar, Chip, Skeleton, Divider,
+  List, ListItem, ListItemText, useTheme, Button, useMediaQuery, CircularProgress,
   Checkbox, Dialog, DialogTitle, DialogContent, DialogActions, Tooltip,
 } from '@mui/material'
-import { alpha } from '@mui/material/styles'
 import {
-  Inventory2, Receipt, ShoppingCart, AttachMoney, Warning,
+  Inventory2, Receipt, ShoppingCart, AttachMoney, Warning, ErrorOutlined,
   ArrowForward, TrendingUp, TrendingDown, Delete,
   AutoAwesome, CalendarToday, CheckCircle,
 } from '@mui/icons-material'
@@ -22,102 +21,199 @@ import { useInventoryStore } from '@/features/inventory/store/inventoryStore'
 import { useBudgetStore } from '@/features/budgets/store/budgetStore'
 import { usePurchaseStore } from '@/features/purchases/store/purchaseStore'
 import { useAppStore } from '@/store/appStore'
-import { ACCENT_KEYS, MEMBER_ACCENT_ORDER } from '@/shared/constants/accents'
+import LoadErrorBanner from '@/shared/components/LoadErrorBanner'
+import { fmtMoney, fmtDate, fmtMonth } from '@/shared/utils/format'
+
+// Tamaños de la pantalla (escala de 4): 48 hero (36 en móvil) · 20 títulos/KPIs · 15 texto · 13 meta
+const FS = { hero: 48, heroXs: 36, title: 20, body: 15, meta: 13 }
+
+const NUM = { fontVariantNumeric: 'tabular-nums' }
+
+// Cada bloque entra una sola vez, escalonado (único momento orquestado)
+const reveal = i => ({ className: 'reveal', style: { '--i': i } })
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
-function StatCard({ icon, label, value, accent = 'indigo', sub, loading }) {
-  const theme = useTheme()
-  const color = theme.palette[ACCENT_KEYS[accent]].main
-  if (loading) return <Skeleton variant="rectangular" height={110} sx={{ borderRadius: 2 }} />
+function Panel({ children, sx, ...rest }) {
+  return <Card component="section" {...rest} sx={{ overflow: 'hidden', ...sx }}>{children}</Card>
+}
+
+function PanelHeader({ title, caption, children }) {
   return (
-    <Card sx={{ p: 2.5, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-      <Box sx={{ width: 36, height: 36, borderRadius: '10px', bgcolor: alpha(color, 0.12), display: 'flex', alignItems: 'center', justifyContent: 'center', color }}>
+    <Box sx={{ px: 3, py: 2, minHeight: 64, borderBottom: 1, borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+      <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+        <Typography component="h2" sx={{ fontSize: FS.title, fontWeight: 700, lineHeight: 1.3 }}>{title}</Typography>
+        {caption && <Typography sx={{ fontSize: FS.meta, color: 'text.secondary' }}>{caption}</Typography>}
+      </Box>
+      {children}
+    </Box>
+  )
+}
+
+function KpiCard({ icon, label, value, sub, loading, trendIcon }) {
+  const theme = useTheme()
+  const st = theme.palette.stock
+  const subColor = sub?.negative ? st.agotado.text : theme.palette.text.secondary
+  return (
+    <Card sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'text.secondary' }}>
         {icon}
+        <Typography component="span" sx={{ fontSize: FS.body, color: 'text.secondary' }}>{label}</Typography>
       </Box>
-      <Box>
-        <Typography variant="h5" fontWeight={800} sx={{ letterSpacing: '-0.02em', lineHeight: 1, mb: 0.25 }}>
-          {value}
-        </Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.3, fontSize: '0.8125rem' }}>
-          {label}
-        </Typography>
-        {sub && (
-          <Typography variant="caption" sx={{ display: 'block', mt: 0.5, color: sub.positive ? theme.palette.success.main : sub.negative ? theme.palette.error.main : 'text.secondary' }}>
-            {sub.text}
-          </Typography>
-        )}
-      </Box>
+      {loading ? (
+        <>
+          <Skeleton variant="text" width="50%" sx={{ fontSize: FS.title }} />
+          <Skeleton variant="text" width="70%" sx={{ fontSize: FS.meta }} />
+        </>
+      ) : (
+        <>
+          <Typography sx={{ ...NUM, fontSize: FS.title, fontWeight: 700, lineHeight: 1.3 }}>{value}</Typography>
+          {sub && (
+            <Typography sx={{ ...NUM, fontSize: FS.meta, color: subColor, display: 'flex', alignItems: 'center', gap: 0.5, fontWeight: sub.negative ? 700 : 400 }}>
+              {trendIcon}
+              {sub.text}
+            </Typography>
+          )}
+        </>
+      )}
     </Card>
   )
 }
 
 function ChartTooltip({ active, payload, label }) {
-  const theme = useTheme()
   if (!active || !payload?.length) return null
   return (
-    <Box sx={{ bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: 2, p: 1.5, boxShadow: theme.palette.mode === 'dark' ? '0 8px 24px rgba(0,0,0,0.5)' : '0 8px 24px rgba(0,0,0,0.1)' }}>
-      <Typography variant="caption" color="text.secondary" display="block">{label}</Typography>
-      <Typography variant="subtitle2" fontWeight={700}>
-        S/{Number(payload[0].value).toLocaleString('es-AR', { maximumFractionDigits: 0 })}
-      </Typography>
+    <Box sx={{ bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: '8px', p: 1.5, boxShadow: '0 8px 24px rgba(15,23,42,0.16)' }}>
+      <Typography sx={{ fontSize: FS.meta, color: 'text.secondary' }} display="block">{fmtMonth(label)}</Typography>
+      <Typography sx={{ ...NUM, fontSize: FS.body, fontWeight: 700 }}>{fmtMoney(payload[0].value)}</Typography>
     </Box>
   )
 }
 
-function UserBar({ name, amount, max, color }) {
+function UserBar({ name, amount, max, reduceMotion }) {
   const pct = max > 0 ? Math.min((amount / max) * 100, 100) : 0
   return (
     <Box sx={{ mb: 2, '&:last-child': { mb: 0 } }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.75 }}>
-        <Typography variant="body2" fontWeight={500}>{name}</Typography>
-        <Typography variant="body2" fontWeight={700}>S/{amount.toLocaleString('es-AR', { maximumFractionDigits: 0 })}</Typography>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1, mb: 1 }}>
+        <Typography sx={{ fontSize: FS.body }}>{name}</Typography>
+        <Typography sx={{ ...NUM, fontSize: FS.body, fontWeight: 700, textAlign: 'right' }}>{fmtMoney(amount)}</Typography>
       </Box>
-      <Box sx={{ height: 6, bgcolor: 'action.hover', borderRadius: 99, overflow: 'hidden' }}>
-        <Box sx={{ height: '100%', width: '100%', transform: `scaleX(${pct / 100})`, transformOrigin: 'left', background: `linear-gradient(90deg, ${color}88, ${color})`, borderRadius: 99, transition: 'transform 0.6s ease' }} />
+      <Box sx={{ height: 8, bgcolor: 'action.hover', borderRadius: '8px', overflow: 'hidden' }}>
+        <Box sx={{ height: '100%', width: '100%', transform: `scaleX(${pct / 100})`, transformOrigin: 'left', bgcolor: 'primary.main', borderRadius: '8px', transition: reduceMotion ? 'none' : 'transform 240ms cubic-bezier(0.22, 1, 0.36, 1)' }} />
       </Box>
     </Box>
   )
 }
 
-function PredictionCard({ icon, title, value, sub, accent = 'amber', loading, empty }) {
-  const theme = useTheme()
-  const color = theme.palette[ACCENT_KEYS[accent]].main
-  if (loading) return <Skeleton variant="rectangular" height={100} sx={{ borderRadius: 2 }} />
+function InsightCard({ icon, title, value, sub, color, loading, empty }) {
   return (
-    <Card sx={{ p: 2, position: 'relative', overflow: 'hidden' }}>
-      <Box sx={{ position: 'absolute', top: -16, right: -16, width: 64, height: 64, borderRadius: '50%', bgcolor: alpha(color, 0.12), pointerEvents: 'none' }} />
-      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.25 }}>
-        <Box sx={{ p: 0.75, bgcolor: alpha(color, 0.12), borderRadius: '7px', color, display: 'flex', flexShrink: 0 }}>
-          {icon}
-        </Box>
-        <Box sx={{ minWidth: 0 }}>
-          <Typography component="h3" variant="caption" color="text.secondary" sx={{ display: 'block', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', fontSize: '0.625rem', mb: 0.25 }}>
-            {title}
-          </Typography>
-          {empty ? (
-            <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic' }}>Sin datos</Typography>
-          ) : (
-            <>
-              <Typography variant="subtitle1" fontWeight={800} sx={{ letterSpacing: '-0.02em', color, lineHeight: 1.1 }}>
-                {value}
-              </Typography>
-              {sub && (
-                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25, lineHeight: 1.35, fontSize: '0.6875rem' }}>{sub}</Typography>
+    <Card sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'text.secondary' }}>
+        {icon}
+        <Typography component="h3" sx={{ fontSize: FS.body, fontWeight: 700, color: 'text.secondary' }}>{title}</Typography>
+      </Box>
+      {loading ? (
+        <>
+          <Skeleton variant="text" width="45%" sx={{ fontSize: FS.title }} />
+          <Skeleton variant="text" width="65%" sx={{ fontSize: FS.meta }} />
+        </>
+      ) : empty ? (
+        <Typography sx={{ fontSize: FS.body, color: 'text.secondary' }}>Sin datos</Typography>
+      ) : (
+        <>
+          <Typography sx={{ ...NUM, fontSize: FS.title, fontWeight: 700, lineHeight: 1.3, color: color || 'text.primary' }}>{value}</Typography>
+          {sub && <Typography sx={{ ...NUM, fontSize: FS.meta, color: 'text.secondary' }}>{sub}</Typography>}
+        </>
+      )}
+    </Card>
+  )
+}
+
+// El dato hero: cuántos productos piden reposición. Estado = tono + icono + texto.
+function StockHero({ loading, unknown, count, lowCount, riskCount, primaryIsBudgets, onGo }) {
+  const theme = useTheme()
+  const st = theme.palette.stock
+  const tone = unknown ? 'desconocido' : count === 0 ? 'saludable' : lowCount > 0 ? 'agotado' : 'riesgo'
+  const skin = {
+    desconocido: { ...st.saludable, Icon: ErrorOutlined },
+    saludable:   { ...st.saludable, Icon: CheckCircle },
+    riesgo:      { ...st.riesgo, Icon: Warning },
+    agotado:     { ...st.agotado, Icon: ErrorOutlined },
+  }[tone]
+
+  return (
+    <Card sx={{ bgcolor: loading ? 'background.paper' : skin.tint, borderColor: loading ? 'divider' : skin.line, p: 3, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: 3 }}>
+      {loading ? (
+        <>
+          <Skeleton variant="text" width="50%" sx={{ fontSize: FS.body }} />
+          <Skeleton variant="text" width="70%" sx={{ fontSize: FS.hero }} />
+          <Skeleton variant="text" width="60%" sx={{ fontSize: FS.body }} />
+        </>
+      ) : (
+        <>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <skin.Icon sx={{ fontSize: 24, color: skin.icon }} />
+              <Typography component="h2" sx={{ fontSize: FS.body, fontWeight: 700 }}>Items en riesgo</Typography>
+            </Box>
+            <Typography sx={{ ...NUM, fontSize: { xs: FS.heroXs, md: FS.hero }, fontWeight: 800, lineHeight: 1.1, letterSpacing: '-0.02em', color: skin.text }}>
+              {count === 0 ? 'Sin alertas' : (
+                <>
+                  {count}
+                  <Box component="span" sx={{ fontSize: FS.title, fontWeight: 700, ml: 1 }}>{count > 1 ? 'productos' : 'producto'}</Box>
+                </>
               )}
-            </>
-          )}
-        </Box>
+            </Typography>
+            <Typography sx={{ fontSize: FS.body, fontWeight: 600, color: 'text.primary' }}>
+              {count === 0 ? 'Stock saludable' : `${lowCount} agotado${lowCount !== 1 ? 's' : ''} · ${riskCount} en riesgo`}
+            </Typography>
+          </Box>
+        </>
+      )}
+      <Box>
+        <Button variant={primaryIsBudgets ? 'outlined' : 'contained'} endIcon={<ArrowForward sx={{ fontSize: 20 }} />} onClick={onGo}>
+          Ir al inventario
+        </Button>
       </Box>
     </Card>
+  )
+}
+
+function ListSkeleton({ rows = 3 }) {
+  return (
+    <Box sx={{ px: 3, py: 1 }}>
+      {Array.from({ length: rows }).map((_, i) => (
+        <Box key={i} sx={{ display: 'flex', alignItems: 'center', gap: 2, minHeight: 56 }}>
+          <Skeleton variant="rectangular" width={40} height={40} />
+          <Box sx={{ flexGrow: 1 }}>
+            <Skeleton variant="text" width="55%" sx={{ fontSize: FS.body }} />
+            <Skeleton variant="text" width="35%" sx={{ fontSize: FS.meta }} />
+          </Box>
+          <Skeleton variant="text" width={72} sx={{ fontSize: FS.body }} />
+        </Box>
+      ))}
+    </Box>
+  )
+}
+
+function NameList({ names }) {
+  const shown = names.slice(0, 5)
+  const rest = names.length - shown.length
+  return (
+    <Box component="ul" sx={{ m: 0, mt: 2, pl: 3, fontSize: FS.body, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+      {shown.map((n, i) => <li key={`${n}-${i}`}><Typography component="span" sx={{ fontSize: FS.body, fontWeight: 600 }}>{n}</Typography></li>)}
+      {rest > 0 && <li><Typography component="span" sx={{ fontSize: FS.body, color: 'text.secondary' }}>+{rest} más</Typography></li>}
+    </Box>
   )
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function DashboardPage() {
   const theme = useTheme()
+  const st = theme.palette.stock
   const navigate = useNavigate()
   const { enqueueSnackbar } = useSnackbar()
+  const reduceMotion = useMediaQuery('(prefers-reduced-motion: reduce)')
   const { profile } = useAuthStore()
   const { currentWorkspace, members, fetchMembers } = useWorkspaceStore()
   const { products, fetchProducts, fetchCategories, deactivateProducts, loading: invLoading } = useInventoryStore()
@@ -134,16 +230,28 @@ export default function DashboardPage() {
   const [selectedStock, setSelectedStock]           = useState(new Set())
   const [stockConfirm, setStockConfirm]             = useState(false)
   const [stockDeactivating, setStockDeactivating]   = useState(false)
+  const [loadError, setLoadError]                   = useState(null)
+  const [retryTick, setRetryTick]                   = useState(0)
 
+  // Mismas cinco cargas de siempre; ahora se recoge el `{ error }` que ya devuelven
   useEffect(() => {
-    if (currentWorkspace) {
-      fetchProducts(currentWorkspace.id)
-      fetchCategories(currentWorkspace.id)
-      fetchBudgets(currentWorkspace.id)
-      fetchPurchases(currentWorkspace.id)
-      fetchMembers(currentWorkspace.id)
-    }
-  }, [currentWorkspace?.id, refreshSignal])
+    if (!currentWorkspace) return
+    let cancelled = false
+    Promise.all([
+      fetchProducts(currentWorkspace.id),
+      fetchCategories(currentWorkspace.id),
+      fetchBudgets(currentWorkspace.id),
+      fetchPurchases(currentWorkspace.id),
+      fetchMembers(currentWorkspace.id),
+    ])
+      .then(results => {
+        if (cancelled) return
+        const failed = results.find(r => r?.error)
+        setLoadError(failed ? { message: failed.error.message || 'Sin detalle del servidor' } : null)
+      })
+      .catch(e => { if (!cancelled) setLoadError({ message: e?.message || 'Sin detalle del servidor' }) })
+    return () => { cancelled = true }
+  }, [currentWorkspace?.id, refreshSignal, retryTick])
 
   // ── Derived stats
   const totalSpent     = useMemo(() => purchases.reduce((a, p) => a + (p.total_amount || 0), 0), [purchases])
@@ -230,380 +338,390 @@ export default function DashboardPage() {
   const primaryColor = theme.palette.primary.main
   const loading      = invLoading || budgLoading || purchLoading
 
+  // Estado por dato (skeleton solo mientras no hay nada que mostrar en listas y gráficos)
+  const purchListLoading = purchLoading && recentPurchases.length === 0
+  const stockListLoading = invLoading && stockAlerts.length === 0
+  const chartsLoading    = purchLoading && !hasChartData && !hasUserData
+
+  // Acción primaria única: ir al inventario, salvo que no haya nada que reponer ni compras aún
+  const primaryIsBudgets = stockAlerts.length === 0 && recentPurchases.length === 0
+
   const greeting = useMemo(() => {
     const h = new Date().getHours()
     return h < 12 ? 'Buenos días' : h < 19 ? 'Buenas tardes' : 'Buenas noches'
   }, [])
 
+  // Tendencia: bajar el gasto es neutro; subir hasta 15% avisa (ámbar); más de 15% es exceso (coral)
+  const trendColor = spendTrend === null || spendTrend <= 0 ? theme.palette.text.primary
+    : spendTrend <= 15 ? st.riesgo.text : st.agotado.text
+  const TrendIcon = spendTrend !== null && spendTrend < 0 ? TrendingDown : TrendingUp
+
+  const kpis = [
+    {
+      label: 'Productos activos', value: activeProducts,
+      icon: <Inventory2 sx={{ fontSize: 20 }} />,
+      sub: products.length > activeProducts ? { text: `${products.length - activeProducts} inactivo${products.length - activeProducts > 1 ? 's' : ''}` } : null,
+    },
+    {
+      label: 'Presupuestos activos', value: activeBudgets,
+      icon: <Receipt sx={{ fontSize: 20 }} />,
+      sub: budgets.length > activeBudgets ? { text: `${budgets.length} en total` } : null,
+    },
+    {
+      label: 'Compras este mes', value: thisMonthCount,
+      icon: <ShoppingCart sx={{ fontSize: 20 }} />,
+      sub: spendTrend !== null
+        ? { text: `${spendTrend >= 0 ? '+' : ''}${spendTrend}% vs mes anterior`, negative: spendTrend > 25 }
+        : purchases.length > 0 ? { text: `${purchases.length} en total` } : null,
+      trendIcon: spendTrend !== null ? <TrendIcon sx={{ fontSize: 16 }} /> : null,
+    },
+    {
+      label: 'Total gastado', value: fmtMoney(totalSpent),
+      icon: <AttachMoney sx={{ fontSize: 20 }} />,
+      sub: thisMonthSpend > 0 ? { text: `${fmtMoney(thisMonthSpend)} este mes` } : null,
+    },
+  ]
+
+  const chartSummary = hasChartData
+    ? `Gasto mensual, últimos ${monthlyData.length} meses: ${monthlyData.map(d => `${fmtMonth(d.month)} ${fmtMoney(d.total)}`).join(', ')}`
+    : ''
+
+  const selectedPurchNames = recentPurchases.filter(p => selectedPurch.has(p.id)).map(p => p.name)
+  const selectedStockNames = stockAlerts.filter(p => selectedStock.has(p.id)).map(p => p.name)
+  const alertsShown = Math.min(stockAlerts.length, 7)
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
 
       {/* ── Header ── */}
-      <Box>
-        <Typography component="h1" variant="h4" fontWeight={800} sx={{ letterSpacing: '-0.02em', mb: 0.25 }}>
+      <Box {...reveal(0)}>
+        <Typography component="h1" sx={{ fontSize: FS.title, fontWeight: 800, lineHeight: 1.3, letterSpacing: '-0.01em' }}>
           {greeting},{' '}
           <Box component="span" sx={{ color: 'primary.main' }}>
             {profile?.full_name?.split(' ')[0] || 'bienvenido'}
           </Box>
         </Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ textTransform: 'capitalize' }}>
+        <Typography sx={{ ...NUM, fontSize: FS.body, color: 'text.secondary' }}>
           {currentWorkspace?.name && `${currentWorkspace.name}  ·  `}
-          {new Date().toLocaleDateString('es-AR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+          {new Date().toLocaleDateString('es-AR', { weekday: 'long' })} {fmtDate(new Date())}
         </Typography>
       </Box>
 
-      {/* ── Stat cards — always 4 ── */}
-      <Grid container spacing={2}>
-        {[
-          {
-            label: 'Productos activos', value: activeProducts,
-            icon: <Inventory2 sx={{ fontSize: 18 }} />, accent: 'indigo',
-            sub: products.length > activeProducts ? { text: `${products.length - activeProducts} inactivo${products.length - activeProducts > 1 ? 's' : ''}`, positive: false, negative: false } : null,
-          },
-          {
-            label: 'Presupuestos activos', value: activeBudgets,
-            icon: <Receipt sx={{ fontSize: 18 }} />, accent: 'cyan',
-            sub: budgets.length > activeBudgets ? { text: `${budgets.length} en total`, positive: false, negative: false } : null,
-          },
-          {
-            label: 'Compras este mes', value: thisMonthCount,
-            icon: <ShoppingCart sx={{ fontSize: 18 }} />, accent: 'violet',
-            sub: spendTrend !== null
-              ? { text: `${spendTrend >= 0 ? '+' : ''}${spendTrend}% vs mes anterior`, positive: spendTrend < 0, negative: spendTrend > 25 }
-              : purchases.length > 0 ? { text: `${purchases.length} en total`, positive: false, negative: false } : null,
-          },
-          {
-            label: 'Total gastado', value: `S/${totalSpent.toLocaleString('es-AR', { maximumFractionDigits: 0 })}`,
-            icon: <AttachMoney sx={{ fontSize: 18 }} />, accent: 'emerald',
-            sub: thisMonthSpend > 0 ? { text: `S/${thisMonthSpend.toLocaleString('es-AR', { maximumFractionDigits: 0 })} este mes`, positive: false, negative: false } : null,
-          },
-        ].map(s => (
-          <Grid size={{ xs: 6, sm: 3 }} key={s.label}>
-            <StatCard {...s} loading={loading} />
-          </Grid>
-        ))}
-      </Grid>
+      {/* ── Error de carga: causa concreta + Reintentar ── */}
+      {loadError && <LoadErrorBanner message={loadError.message} onRetry={() => { setLoadError(null); setRetryTick(t => t + 1) }} />}
 
-      {/* ── Charts — only when purchase data exists ── */}
-      {(hasChartData || hasUserData) && (
-        <Grid container spacing={2}>
-          {hasChartData && (
-            <Grid size={{ xs: 12, md: hasUserData ? 8 : 12 }}>
-              <Card sx={{ p: 2.5 }}>
-                <Typography component="h3" variant="subtitle1" fontWeight={700} sx={{ mb: 0.25 }}>Gasto mensual</Typography>
-                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>Últimos {monthlyData.length} meses</Typography>
-                <ResponsiveContainer width="100%" height={180}>
-                  <AreaChart data={monthlyData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="spendGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%"  stopColor={primaryColor} stopOpacity={0.2} />
-                        <stop offset="95%" stopColor={primaryColor} stopOpacity={0.02} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.divider} vertical={false} />
-                    <XAxis dataKey="month" tick={{ fontSize: 10, fill: theme.palette.text.secondary }} tickLine={false} axisLine={false} />
-                    <YAxis tick={{ fontSize: 10, fill: theme.palette.text.secondary }} tickLine={false} axisLine={false} tickFormatter={v => `S/${v}`} />
-                    <RechartTooltip content={<ChartTooltip />} cursor={{ stroke: primaryColor, strokeWidth: 1, strokeDasharray: '4 4' }} />
-                    <Area type="monotone" dataKey="total" stroke={primaryColor} strokeWidth={2} fill="url(#spendGrad)" dot={false}
-                      activeDot={{ r: 4, fill: primaryColor, stroke: theme.palette.background.paper, strokeWidth: 2 }} />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </Card>
-            </Grid>
-          )}
-          {hasUserData && (
-            <Grid size={{ xs: 12, md: hasChartData ? 4 : 12 }}>
-              <Card sx={{ p: 2.5 }}>
-                <Typography component="h3" variant="subtitle1" fontWeight={700} sx={{ mb: 0.25 }}>Gasto por miembro</Typography>
-                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2.5 }}>Distribución del equipo</Typography>
-                {[...spendingByUser].sort((a, b) => b.total - a.total).map((u, i) => (
-                  <UserBar key={u.name} name={u.name} amount={u.total} max={maxUserSpent} color={theme.palette[MEMBER_ACCENT_ORDER[i % MEMBER_ACCENT_ORDER.length]].main} />
+      {/* ── Nivel 1: dato hero + stock ── */}
+      <Box {...reveal(1)} sx={{ display: 'grid', gap: 3, gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: 'minmax(0, 5fr) minmax(0, 7fr)' } }}>
+        <StockHero
+          loading={invLoading && products.length === 0}
+          unknown={Boolean(loadError) && products.length === 0}
+          count={stockAlerts.length} lowCount={lowStock.length} riskCount={atRisk.length}
+          primaryIsBudgets={primaryIsBudgets}
+          onGo={() => navigate('/inventory')}
+        />
+
+        <Panel aria-label="Stock">
+          <PanelHeader title={stockListLoading ? '' : lowStock.length > 0 ? 'Stock bajo' : atRisk.length > 0 ? 'Productos en riesgo' : 'Todo en orden'}>
+            {stockAlerts.length > 0 && (
+              <Chip
+                label={stockAlerts.length}
+                size="small"
+                aria-label={`${stockAlerts.length} ${lowStock.length > 0 ? 'productos agotados o en riesgo' : 'productos en riesgo'}`}
+                sx={{
+                  bgcolor: (lowStock.length > 0 ? st.agotado : st.riesgo).tint,
+                  color: (lowStock.length > 0 ? st.agotado : st.riesgo).text,
+                  border: `1px solid ${(lowStock.length > 0 ? st.agotado : st.riesgo).line}`,
+                  flexShrink: 0,
+                }}
+              />
+            )}
+            {stockAlerts.length > 0 && stockSelectMode && selectedStock.size > 0 && (
+              <Button className="select-in" variant="outlined" startIcon={<Delete sx={{ fontSize: 20 }} />}
+                onClick={() => setStockConfirm(true)} sx={{ flexShrink: 0 }}>
+                Desactivar ({selectedStock.size})
+              </Button>
+            )}
+            {stockAlerts.length > 0 && (
+              <Tooltip title={stockSelectMode ? 'Cancelar' : 'Seleccionar'}>
+                <Button variant={stockSelectMode ? 'outlined' : 'text'} color="inherit"
+                  onClick={() => { setStockSelectMode(m => !m); setSelectedStock(new Set()) }}
+                  sx={{ color: stockSelectMode ? 'text.primary' : 'text.secondary', flexShrink: 0 }}>
+                  {stockSelectMode ? 'Cancelar' : 'Seleccionar'}
+                </Button>
+              </Tooltip>
+            )}
+          </PanelHeader>
+
+          {stockListLoading ? (
+            <ListSkeleton rows={3} />
+          ) : stockAlerts.length === 0 ? (
+            <Box sx={{ px: 3, py: 4, display: 'flex', alignItems: 'center', gap: 2 }}>
+              <CheckCircle sx={{ fontSize: 32, color: 'text.secondary' }} />
+              <Box>
+                <Typography sx={{ fontSize: FS.body, fontWeight: 700 }}>Stock saludable</Typography>
+                <Typography sx={{ fontSize: FS.meta, color: 'text.secondary' }}>Todos los productos con stock suficiente</Typography>
+              </Box>
+            </Box>
+          ) : (
+            <>
+              <List disablePadding>
+                {stockAlerts.slice(0, 7).map((p, i) => (
+                  <Box key={p.id}>
+                    <ListItem
+                      sx={{ px: 3, py: 1, minHeight: 56, gap: 2, cursor: stockSelectMode ? 'pointer' : 'default', '&:hover': stockSelectMode ? { bgcolor: 'action.hover' } : {} }}
+                      onClick={stockSelectMode ? () => toggleStockSelect(p.id) : undefined}
+                    >
+                      {stockSelectMode && (
+                        <Checkbox className="select-in" checked={selectedStock.has(p.id)}
+                          sx={{ ml: -1 }}
+                          onClick={e => { e.stopPropagation(); toggleStockSelect(p.id) }}
+                          inputProps={{ 'aria-label': `Seleccionar producto ${p.name}` }} />
+                      )}
+                      <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: p.categories?.color || theme.palette.text.disabled, flexShrink: 0 }} />
+                      <ListItemText
+                        sx={{ my: 0, minWidth: 0 }}
+                        primary={<Typography sx={{ fontSize: FS.body, fontWeight: 700 }} noWrap>{p.name}</Typography>}
+                        secondary={
+                          <Typography component="span" sx={{ ...NUM, fontSize: FS.meta, color: 'text.secondary' }}>
+                            {p._sev === 'critical' ? 'Agotado' : 'Bajo'} · {p.current_quantity} {p.unit} (mín {p.min_quantity})
+                          </Typography>
+                        }
+                        slotProps={{ secondary: { component: 'div' } }}
+                      />
+                      <Tooltip title={p._sev === 'critical' ? 'Agotado' : 'Stock bajo'}>
+                        <Box component="span" role="img" tabIndex={0} aria-label={p._sev === 'critical' ? 'Agotado' : 'Stock bajo'}
+                          sx={{ display: 'flex', flexShrink: 0, color: p._sev === 'critical' ? st.agotado.icon : st.riesgo.icon, borderRadius: '8px' }}>
+                          {p._sev === 'critical' ? <ErrorOutlined sx={{ fontSize: 24 }} /> : <Warning sx={{ fontSize: 24 }} />}
+                        </Box>
+                      </Tooltip>
+                    </ListItem>
+                    {i < alertsShown - 1 && <Divider sx={{ mx: 3 }} />}
+                  </Box>
                 ))}
-              </Card>
-            </Grid>
+              </List>
+              <Box sx={{ px: 3, py: 2, borderTop: 1, borderColor: 'divider' }}>
+                <Typography sx={{ ...NUM, fontSize: FS.meta, color: 'text.secondary' }}>
+                  Mostrando {alertsShown} de {stockAlerts.length}
+                </Typography>
+              </Box>
+            </>
           )}
-        </Grid>
-      )}
-
-      {/* ── Predictions — always 4 cards ── */}
-      <Box>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
-          <Box sx={{ p: 0.5, bgcolor: alpha(theme.palette.warning.main, 0.12), borderRadius: '6px', color: theme.palette.warning.main, display: 'flex' }}>
-            <AutoAwesome sx={{ fontSize: 14 }} />
-          </Box>
-          <Typography component="h2" variant="overline" color="text.secondary" sx={{ fontSize: '0.6875rem', letterSpacing: '0.08em' }}>
-            Predicciones e insights
-          </Typography>
-        </Box>
-        <Grid container spacing={2}>
-          <Grid size={{ xs: 6, sm: 6, md: 3 }}>
-            <PredictionCard
-              icon={<CalendarToday sx={{ fontSize: 15 }} />}
-              title="Próxima compra"
-              accent="indigo"
-              loading={purchLoading}
-              empty={nextPurchaseDays === null}
-              value={nextPurchaseDays === 0 ? 'Hoy' : nextPurchaseDays === 1 ? 'Mañana' : nextPurchaseDays < 0 ? `Hace ${Math.abs(nextPurchaseDays)}d` : `En ${nextPurchaseDays}d`}
-              sub={avgDaysBetween ? `Ciclo: ${avgDaysBetween} días` : null}
-            />
-          </Grid>
-          <Grid size={{ xs: 6, sm: 6, md: 3 }}>
-            <PredictionCard
-              icon={<AttachMoney sx={{ fontSize: 15 }} />}
-              title="Presupuesto sugerido"
-              accent="emerald"
-              loading={purchLoading}
-              empty={avgMonthly === 0}
-              value={`S/${Math.round(avgMonthly * 1.1).toLocaleString('es-AR')}`}
-              sub="Promedio + 10% buffer"
-            />
-          </Grid>
-          <Grid size={{ xs: 6, sm: 6, md: 3 }}>
-            <PredictionCard
-              icon={spendTrend !== null && spendTrend < 0 ? <TrendingDown sx={{ fontSize: 15 }} /> : <TrendingUp sx={{ fontSize: 15 }} />}
-              title="Tendencia de gasto"
-              accent={spendTrend === null ? 'amber' : spendTrend <= 0 ? 'emerald' : spendTrend <= 15 ? 'amber' : 'rose'}
-              loading={purchLoading}
-              empty={spendTrend === null}
-              value={spendTrend !== null ? `${spendTrend >= 0 ? '+' : ''}${spendTrend}%` : ''}
-              sub={spendTrend !== null ? `S/${thisMonthSpend.toLocaleString('es-AR', { maximumFractionDigits: 0 })} vs S/${lastMonthSpend.toLocaleString('es-AR', { maximumFractionDigits: 0 })} anterior` : null}
-            />
-          </Grid>
-          <Grid size={{ xs: 6, sm: 6, md: 3 }}>
-            <PredictionCard
-              icon={<Warning sx={{ fontSize: 15 }} />}
-              title="Items en riesgo"
-              accent={stockAlerts.length === 0 ? 'emerald' : lowStock.length > 0 ? 'rose' : 'amber'}
-              loading={invLoading}
-              empty={false}
-              value={stockAlerts.length === 0 ? 'Sin alertas' : `${stockAlerts.length} producto${stockAlerts.length > 1 ? 's' : ''}`}
-              sub={stockAlerts.length === 0 ? 'Stock saludable' : `${lowStock.length} agotado${lowStock.length !== 1 ? 's' : ''} · ${atRisk.length} en riesgo`}
-            />
-          </Grid>
-        </Grid>
+        </Panel>
       </Box>
 
-      {/* ── Main content: 2 permanent columns ── */}
-      <Grid container spacing={2} alignItems="flex-start">
+      {/* ── Nivel 2: KPIs en bento ── */}
+      <Box {...reveal(2)} sx={{ display: 'grid', gap: { xs: 2, md: 3 }, gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))', md: 'repeat(4, minmax(0, 1fr))' } }}>
+        {kpis.map(k => <KpiCard key={k.label} {...k} loading={loading} />)}
+      </Box>
 
-        {/* LEFT col — Últimas compras */}
-        <Grid size={{ xs: 12, md: 7 }}>
-          <Card>
-            {/* Header */}
-            <Box sx={{ px: 2.5, py: 1.75, borderBottom: 1, borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-              <Box sx={{ flexGrow: 1 }}>
-                <Typography component="h3" variant="subtitle1" fontWeight={700} sx={{ lineHeight: 1.2 }}>Últimas compras</Typography>
+      {/* ── Nivel 3: gráficos — solo cuando hay datos de compras ── */}
+      {(hasChartData || hasUserData || chartsLoading) && (
+        <Box {...reveal(3)} sx={{ display: 'grid', gap: 3, gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: hasChartData && hasUserData ? 'minmax(0, 2fr) minmax(0, 1fr)' : 'minmax(0, 1fr)' } }}>
+          {(hasChartData || chartsLoading) && (
+            <Panel>
+              <PanelHeader title="Gasto mensual" caption={hasChartData ? `Últimos ${monthlyData.length} meses` : undefined} />
+              <Box sx={{ p: 3, pt: 2 }}>
+                {chartsLoading ? (
+                  <Skeleton variant="rectangular" height={200} />
+                ) : (
+                  <Box role="img" aria-label={chartSummary}>
+                    <ResponsiveContainer width="100%" height={200}>
+                      <AreaChart data={monthlyData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                        <defs>
+                          <linearGradient id="spendGrad" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%"  stopColor={primaryColor} stopOpacity={0.2} />
+                            <stop offset="95%" stopColor={primaryColor} stopOpacity={0.02} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="2 4" stroke={theme.palette.divider} vertical={false} />
+                        <XAxis dataKey="month" tickMargin={8} tickFormatter={fmtMonth} tick={{ fontSize: FS.meta, fill: theme.palette.text.secondary }} tickLine={false} axisLine={false} />
+                        <YAxis width={72} tick={{ fontSize: FS.meta, fill: theme.palette.text.secondary }} tickLine={false} axisLine={false} tickFormatter={v => `S/ ${Number(v).toLocaleString('en-US')}`} />
+                        <RechartTooltip content={<ChartTooltip />} cursor={{ stroke: primaryColor, strokeWidth: 1, strokeDasharray: '4 4' }} />
+                        <Area type="monotone" dataKey="total" stroke={primaryColor} strokeWidth={2} fill="url(#spendGrad)" dot={false}
+                          isAnimationActive={!reduceMotion} animationDuration={240}
+                          activeDot={{ r: 5, fill: primaryColor, stroke: theme.palette.background.paper, strokeWidth: 2 }} />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </Box>
+                )}
               </Box>
-              {recentPurchases.length > 0 && (
-                <>
-                  {purchSelectMode && selectedPurch.size > 0 && (
-                    <Button size="small" color="error" variant="contained" startIcon={<Delete sx={{ fontSize: 14 }} />}
-                      onClick={() => setPurchDeleteConfirm(true)} sx={{ minHeight: 36, fontSize: '0.7rem', flexShrink: 0 }}>
-                      Eliminar ({selectedPurch.size})
-                    </Button>
-                  )}
-                  <Tooltip title={purchSelectMode ? 'Cancelar selección' : 'Seleccionar'}>
-                    <Button size="small" variant={purchSelectMode ? 'outlined' : 'text'} color={purchSelectMode ? 'error' : 'inherit'}
-                      onClick={() => { setPurchSelectMode(m => !m); setSelectedPurch(new Set()) }}
-                      sx={{ minHeight: 36, color: purchSelectMode ? undefined : 'text.secondary', fontSize: '0.7rem', px: 1.5, flexShrink: 0 }}>
-                      {purchSelectMode ? 'Cancelar' : 'Seleccionar'}
-                    </Button>
-                  </Tooltip>
-                  {!purchSelectMode && (
-                    <Button size="small" endIcon={<ArrowForward sx={{ fontSize: 13 }} />} onClick={() => navigate('/purchases')}
-                      sx={{ color: 'text.secondary', minHeight: 36, fontSize: '0.7rem', flexShrink: 0 }}>
-                      Ver todas
-                    </Button>
-                  )}
-                </>
-              )}
+            </Panel>
+          )}
+          {hasUserData && (
+            <Panel>
+              <PanelHeader title="Gasto por miembro" caption="Distribución del equipo" />
+              <Box sx={{ p: 3 }}>
+                {[...spendingByUser].sort((a, b) => b.total - a.total).map(u => (
+                  <UserBar key={u.name} name={u.name} amount={u.total} max={maxUserSpent} reduceMotion={reduceMotion} />
+                ))}
+              </Box>
+            </Panel>
+          )}
+        </Box>
+      )}
+
+      {/* ── Predicciones e insights ── */}
+      <Box {...reveal(4)}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+          <AutoAwesome sx={{ fontSize: 20, color: 'text.secondary' }} />
+          <Typography component="h2" sx={{ fontSize: FS.title, fontWeight: 700, lineHeight: 1.3 }}>Predicciones e insights</Typography>
+        </Box>
+        <Box sx={{ display: 'grid', gap: { xs: 2, md: 3 }, gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: 'repeat(3, minmax(0, 1fr))' } }}>
+          <InsightCard
+            icon={<CalendarToday sx={{ fontSize: 20 }} />}
+            title="Próxima compra"
+            loading={purchLoading}
+            empty={nextPurchaseDays === null}
+            value={nextPurchaseDays === 0 ? 'Hoy' : nextPurchaseDays === 1 ? 'Mañana' : nextPurchaseDays < 0 ? `Hace ${Math.abs(nextPurchaseDays)}d` : `En ${nextPurchaseDays}d`}
+            sub={avgDaysBetween ? `Ciclo: ${avgDaysBetween} días` : null}
+          />
+          <InsightCard
+            icon={<AttachMoney sx={{ fontSize: 20 }} />}
+            title="Presupuesto sugerido"
+            loading={purchLoading}
+            empty={avgMonthly === 0}
+            value={fmtMoney(Math.round(avgMonthly * 1.1))}
+            sub="Promedio + 10% buffer"
+          />
+          <InsightCard
+            icon={<TrendIcon sx={{ fontSize: 20 }} />}
+            title="Tendencia de gasto"
+            color={trendColor}
+            loading={purchLoading}
+            empty={spendTrend === null}
+            value={spendTrend !== null ? `${spendTrend >= 0 ? '+' : ''}${spendTrend}%` : ''}
+            sub={spendTrend !== null ? `${fmtMoney(thisMonthSpend)} vs ${fmtMoney(lastMonthSpend)} anterior` : null}
+          />
+        </Box>
+      </Box>
+
+      {/* ── Últimas compras + Equipo ── */}
+      <Box {...reveal(5)} sx={{ display: 'grid', gap: 3, gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: members.length > 0 ? 'minmax(0, 7fr) minmax(0, 5fr)' : 'minmax(0, 1fr)' }, alignItems: 'start' }}>
+
+        <Panel>
+          <PanelHeader title="Últimas compras">
+            {recentPurchases.length > 0 && (
+              <>
+                {purchSelectMode && selectedPurch.size > 0 && (
+                  <Button className="select-in" variant="outlined" startIcon={<Delete sx={{ fontSize: 20 }} />}
+                    onClick={() => setPurchDeleteConfirm(true)} sx={{ flexShrink: 0 }}>
+                    Eliminar ({selectedPurch.size})
+                  </Button>
+                )}
+                <Tooltip title={purchSelectMode ? 'Cancelar selección' : 'Seleccionar'}>
+                  <Button variant={purchSelectMode ? 'outlined' : 'text'} color="inherit"
+                    onClick={() => { setPurchSelectMode(m => !m); setSelectedPurch(new Set()) }}
+                    sx={{ color: purchSelectMode ? 'text.primary' : 'text.secondary', flexShrink: 0 }}>
+                    {purchSelectMode ? 'Cancelar' : 'Seleccionar'}
+                  </Button>
+                </Tooltip>
+              </>
+            )}
+          </PanelHeader>
+
+          {purchListLoading ? (
+            <ListSkeleton rows={4} />
+          ) : recentPurchases.length === 0 ? (
+            <Box sx={{ px: 3, py: 6, display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 2 }}>
+              <Box sx={{ width: 56, height: 56, borderRadius: '12px', bgcolor: 'action.hover', color: 'text.secondary', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <ShoppingCart sx={{ fontSize: 28 }} />
+              </Box>
+              <Box>
+                <Typography sx={{ fontSize: FS.body, fontWeight: 700 }}>Sin compras todavía</Typography>
+                <Typography sx={{ fontSize: FS.meta, color: 'text.secondary' }}>Iniciá una compra desde un presupuesto activo</Typography>
+              </Box>
+              <Button variant={primaryIsBudgets ? 'contained' : 'outlined'} onClick={() => navigate('/budgets')}>
+                Ver presupuestos
+              </Button>
             </Box>
-
-            {recentPurchases.length === 0 ? (
-              <Box sx={{ px: 2.5, py: 4, display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 1.5 }}>
-                <Box sx={{ p: 1.75, bgcolor: 'action.hover', borderRadius: '12px', color: 'text.disabled', display: 'flex' }}>
-                  <ShoppingCart sx={{ fontSize: 28 }} />
-                </Box>
-                <Box>
-                  <Typography variant="body2" fontWeight={600} color="text.secondary">Sin compras todavía</Typography>
-                  <Typography variant="caption" color="text.secondary">Iniciá una compra desde un presupuesto activo</Typography>
-                </Box>
-                <Button size="small" variant="outlined" onClick={() => navigate('/budgets')}>
-                  Ver presupuestos
-                </Button>
-              </Box>
-            ) : (
+          ) : (
+            <>
               <List disablePadding>
                 {recentPurchases.map((p, i) => (
                   <Box key={p.id}>
                     <ListItem
-                      sx={{ px: 2.5, py: 1.25, gap: 1.5, cursor: purchSelectMode ? 'pointer' : 'default', '&:hover': purchSelectMode ? { bgcolor: 'action.hover' } : {} }}
+                      sx={{ px: 3, py: 1, minHeight: 64, gap: 2, cursor: purchSelectMode ? 'pointer' : 'default', '&:hover': purchSelectMode ? { bgcolor: 'action.hover' } : {} }}
                       onClick={purchSelectMode ? () => togglePurchSelect(p.id) : undefined}
                     >
                       {purchSelectMode && (
-                        <Checkbox checked={selectedPurch.has(p.id)} sx={{ p: 0.5 }}
+                        <Checkbox className="select-in" checked={selectedPurch.has(p.id)}
+                          sx={{ ml: -1 }}
                           onClick={e => { e.stopPropagation(); togglePurchSelect(p.id) }}
                           inputProps={{ 'aria-label': `Seleccionar compra ${p.name}` }} />
                       )}
-                      <Box sx={{ width: 32, height: 32, borderRadius: '9px', bgcolor: alpha(theme.palette.primary.main, 0.1), display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                        <ShoppingCart sx={{ fontSize: 15, color: 'primary.main' }} />
+                      <Box sx={{ width: 40, height: 40, borderRadius: '8px', bgcolor: 'action.selected', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: 'primary.main' }}>
+                        <ShoppingCart sx={{ fontSize: 20 }} />
                       </Box>
                       <ListItemText
-                        primary={<Typography variant="body2" fontWeight={600} noWrap>{p.name}</Typography>}
+                        sx={{ my: 0, minWidth: 0 }}
+                        primary={<Typography sx={{ fontSize: FS.body, fontWeight: 700 }} noWrap>{p.name}</Typography>}
                         secondary={
-                          <Typography variant="caption" color="text.secondary" noWrap>
-                            {p.profiles?.full_name}{p.date ? `  ·  ${new Date(p.date).toLocaleDateString('es-AR')}` : ''}
+                          <Typography component="span" sx={{ ...NUM, fontSize: FS.meta, color: 'text.secondary' }} noWrap>
+                            {p.profiles?.full_name}{p.date ? `  ·  ${fmtDate(p.date)}` : ''}
                           </Typography>
                         }
+                        slotProps={{ secondary: { component: 'div', noWrap: true } }}
                       />
-                      <Typography variant="body2" fontWeight={700} color="primary.main" sx={{ flexShrink: 0 }}>
-                        S/{(p.total_amount || 0).toLocaleString('es-AR', { maximumFractionDigits: 0 })}
+                      <Typography sx={{ ...NUM, fontSize: FS.body, fontWeight: 700, flexShrink: 0, textAlign: 'right', minWidth: 96 }}>
+                        {fmtMoney(p.total_amount || 0)}
                       </Typography>
                     </ListItem>
-                    {i < recentPurchases.length - 1 && <Divider sx={{ mx: 2.5 }} />}
+                    {i < recentPurchases.length - 1 && <Divider sx={{ mx: 3 }} />}
                   </Box>
                 ))}
               </List>
-            )}
-          </Card>
-        </Grid>
-
-        {/* RIGHT col — Stock + Team stacked, always visible */}
-        <Grid size={{ xs: 12, md: 5 }}>
-          <Stack spacing={2}>
-
-            {/* Stock alerts — always shown */}
-            <Card>
-              <Box sx={{ px: 2.5, py: 1.75, borderBottom: 1, borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                <Box sx={{ flexGrow: 1 }}>
-                  <Typography component="h3" variant="subtitle1" fontWeight={700} sx={{ lineHeight: 1.2 }}>
-                    {lowStock.length > 0 ? 'Stock bajo' : atRisk.length > 0 ? 'Productos en riesgo' : 'Todo en orden'}
-                  </Typography>
-                </Box>
-                {stockAlerts.length > 0 && (
-                  <Chip
-                    label={stockAlerts.length}
-                    size="small"
-                    aria-label={`${stockAlerts.length} ${lowStock.length > 0 ? 'productos agotados o en riesgo' : 'productos en riesgo'}`}
-                    sx={{
-                      bgcolor: alpha(lowStock.length > 0 ? theme.palette.error.main : theme.palette.warning.main, 0.1),
-                      color: lowStock.length > 0 ? theme.palette.error.main : theme.palette.warning.main,
-                      fontWeight: 700,
-                      border: `1px solid ${alpha(lowStock.length > 0 ? theme.palette.error.main : theme.palette.warning.main, 0.2)}`,
-                      height: 22, flexShrink: 0,
-                    }}
-                  />
-                )}
-                {stockAlerts.length > 0 && stockSelectMode && selectedStock.size > 0 && (
-                  <Button size="small" color="warning" variant="contained" startIcon={<Delete sx={{ fontSize: 14 }} />}
-                    onClick={() => setStockConfirm(true)} sx={{ minHeight: 36, fontSize: '0.7rem', flexShrink: 0 }}>
-                    Desactivar ({selectedStock.size})
+              <Box sx={{ px: 3, py: 1, minHeight: 56, borderTop: 1, borderColor: 'divider', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
+                <Typography sx={{ ...NUM, fontSize: FS.meta, color: 'text.secondary' }}>
+                  Mostrando {recentPurchases.length} de {purchases.length}
+                </Typography>
+                {!purchSelectMode && (
+                  <Button endIcon={<ArrowForward sx={{ fontSize: 20 }} />} onClick={() => navigate('/purchases')} sx={{ color: 'text.secondary' }}>
+                    Ver todas
                   </Button>
                 )}
-                {stockAlerts.length > 0 && (
-                  <Tooltip title={stockSelectMode ? 'Cancelar' : 'Seleccionar'}>
-                    <Button size="small" variant={stockSelectMode ? 'outlined' : 'text'} color={stockSelectMode ? 'error' : 'inherit'}
-                      onClick={() => { setStockSelectMode(m => !m); setSelectedStock(new Set()) }}
-                      sx={{ minHeight: 36, color: stockSelectMode ? undefined : 'text.secondary', fontSize: '0.7rem', px: 1, flexShrink: 0 }}>
-                      {stockSelectMode ? 'Cancelar' : 'Seleccionar'}
-                    </Button>
-                  </Tooltip>
-                )}
               </Box>
+            </>
+          )}
+        </Panel>
 
-              {stockAlerts.length === 0 ? (
-                <Box sx={{ px: 2.5, py: 2.5, display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                  <Box sx={{ p: 1, bgcolor: alpha(theme.palette.success.main, 0.1), borderRadius: '10px', color: theme.palette.success.main, display: 'flex' }}>
-                    <CheckCircle sx={{ fontSize: 22 }} />
-                  </Box>
-                  <Box>
-                    <Typography variant="body2" fontWeight={600}>Stock saludable</Typography>
-                    <Typography variant="caption" color="text.secondary">Todos los productos con stock suficiente</Typography>
+        {/* Equipo — solo si hay miembros */}
+        {members.length > 0 && (
+          <Panel>
+            <PanelHeader title={`Equipo · ${members.length} miembro${members.length > 1 ? 's' : ''}`} />
+            <Box sx={{ p: 1 }}>
+              {members.map(m => (
+                <Box key={m.id} sx={{ display: 'flex', alignItems: 'center', gap: 2, px: 2, py: 1, minHeight: 56 }}>
+                  <Avatar
+                    src={m.profiles?.avatar_url}
+                    alt={m.profiles?.full_name || m.profiles?.email || 'Miembro del equipo'}
+                    sx={{ width: 40, height: 40, bgcolor: 'action.selected', color: 'primary.main', borderRadius: '8px' }}
+                  >
+                    {m.profiles?.full_name?.[0]?.toUpperCase()}
+                  </Avatar>
+                  <Box sx={{ minWidth: 0 }}>
+                    <Typography noWrap sx={{ fontSize: FS.body, fontWeight: 700, lineHeight: 1.4 }}>
+                      {m.profiles?.full_name || m.profiles?.email}
+                    </Typography>
+                    <Typography sx={{ fontSize: FS.meta, color: 'text.secondary', textTransform: 'capitalize' }}>{m.role}</Typography>
                   </Box>
                 </Box>
-              ) : (
-                <List disablePadding>
-                  {stockAlerts.slice(0, 7).map((p, i) => (
-                    <Box key={p.id}>
-                      <ListItem
-                        sx={{ px: 2.5, py: 1, gap: 1.25, cursor: stockSelectMode ? 'pointer' : 'default', '&:hover': stockSelectMode ? { bgcolor: 'action.hover' } : {} }}
-                        onClick={stockSelectMode ? () => toggleStockSelect(p.id) : undefined}
-                      >
-                        {stockSelectMode && (
-                          <Checkbox checked={selectedStock.has(p.id)} sx={{ p: 0.5 }}
-                            onClick={e => { e.stopPropagation(); toggleStockSelect(p.id) }}
-                            inputProps={{ 'aria-label': `Seleccionar producto ${p.name}` }} />
-                        )}
-                        <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: p.categories?.color || theme.palette.text.disabled, flexShrink: 0 }} />
-                        <ListItemText
-                          primary={<Typography variant="body2" fontWeight={600} noWrap>{p.name}</Typography>}
-                          secondary={
-                            <Typography variant="caption" color="text.secondary">
-                              {p._sev === 'critical' ? 'Agotado' : 'Bajo'} · {p.current_quantity} {p.unit} (mín {p.min_quantity})
-                            </Typography>
-                          }
-                        />
-                        <Tooltip title={p._sev === 'critical' ? 'Agotado' : 'Stock bajo'}>
-                          <Warning sx={{ fontSize: 15, flexShrink: 0, color: p._sev === 'critical' ? theme.palette.error.main : theme.palette.warning.main }} />
-                        </Tooltip>
-                      </ListItem>
-                      {i < Math.min(stockAlerts.length, 7) - 1 && <Divider sx={{ mx: 2.5 }} />}
-                    </Box>
-                  ))}
-                </List>
-              )}
+              ))}
+            </Box>
+          </Panel>
+        )}
+      </Box>
 
-              <Box sx={{ px: 2.5, py: 1.25, borderTop: 1, borderColor: 'divider' }}>
-                <Button size="small" endIcon={<ArrowForward sx={{ fontSize: 13 }} />} onClick={() => navigate('/inventory')}
-                  sx={{ color: 'text.secondary', fontSize: '0.75rem' }}>
-                  Ir al inventario
-                </Button>
-              </Box>
-            </Card>
-
-            {/* Team members — always rendered if members exist */}
-            {members.length > 0 && (
-              <Card sx={{ p: 2.5 }}>
-                <Typography component="h3" variant="subtitle1" fontWeight={700} sx={{ mb: 2, lineHeight: 1.2 }}>
-                  Equipo · {members.length} miembro{members.length > 1 ? 's' : ''}
-                </Typography>
-                <Stack spacing={1.5}>
-                  {members.map((m, i) => {
-                    const accentColor = theme.palette[MEMBER_ACCENT_ORDER[i % MEMBER_ACCENT_ORDER.length]].main
-                    return (
-                      <Box key={m.id} sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
-                        <Avatar
-                          src={m.profiles?.avatar_url}
-                          alt={m.profiles?.full_name || m.profiles?.email || 'Miembro del equipo'}
-                          sx={{ width: 32, height: 32, fontSize: 12, fontWeight: 700, bgcolor: alpha(accentColor, 0.18), color: accentColor, border: '2px solid', borderColor: alpha(accentColor, 0.25) }}
-                        >
-                          {m.profiles?.full_name?.[0]?.toUpperCase()}
-                        </Avatar>
-                        <Box sx={{ minWidth: 0 }}>
-                          <Typography variant="body2" fontWeight={600} noWrap sx={{ fontSize: '0.8125rem', lineHeight: 1.2 }}>
-                            {m.profiles?.full_name || m.profiles?.email}
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'capitalize' }}>{m.role}</Typography>
-                        </Box>
-                      </Box>
-                    )
-                  })}
-                </Stack>
-              </Card>
-            )}
-          </Stack>
-        </Grid>
-      </Grid>
-
-      {/* ── Dialogs ── */}
+      {/* ── Diálogos: nombran el objeto afectado; cancelar a la izquierda, confirmar a la derecha ── */}
       <Dialog open={purchDeleteConfirm} onClose={() => setPurchDeleteConfirm(false)}>
         <DialogTitle>Eliminar compras</DialogTitle>
         <DialogContent>
-          <Typography>¿Eliminar <strong>{selectedPurch.size}</strong> compra{selectedPurch.size > 1 ? 's' : ''}? Esta acción no se puede deshacer.</Typography>
+          <Typography sx={{ fontSize: FS.body }}>¿Eliminar <strong>{selectedPurch.size}</strong> compra{selectedPurch.size > 1 ? 's' : ''}? Esta acción no se puede deshacer.</Typography>
+          <NameList names={selectedPurchNames} />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setPurchDeleteConfirm(false)}>Cancelar</Button>
-          <Button variant="contained" color="error" onClick={handleBulkDeletePurch} disabled={purchDeleting}>
+          <Button onClick={() => setPurchDeleteConfirm(false)} disabled={purchDeleting}>Cancelar</Button>
+          <Button variant="contained" color="error" onClick={handleBulkDeletePurch} disabled={purchDeleting}
+            startIcon={purchDeleting ? <CircularProgress size={16} color="inherit" /> : undefined}>
             {purchDeleting ? 'Eliminando…' : 'Eliminar'}
           </Button>
         </DialogActions>
@@ -612,11 +730,13 @@ export default function DashboardPage() {
       <Dialog open={stockConfirm} onClose={() => setStockConfirm(false)}>
         <DialogTitle>Desactivar productos</DialogTitle>
         <DialogContent>
-          <Typography>¿Desactivar <strong>{selectedStock.size}</strong> producto{selectedStock.size > 1 ? 's' : ''}? Dejarán de aparecer en el inventario activo.</Typography>
+          <Typography sx={{ fontSize: FS.body }}>¿Desactivar <strong>{selectedStock.size}</strong> producto{selectedStock.size > 1 ? 's' : ''}? Dejarán de aparecer en el inventario activo.</Typography>
+          <NameList names={selectedStockNames} />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setStockConfirm(false)}>Cancelar</Button>
-          <Button variant="contained" color="warning" onClick={handleBulkDeactivateStock} disabled={stockDeactivating}>
+          <Button onClick={() => setStockConfirm(false)} disabled={stockDeactivating}>Cancelar</Button>
+          <Button variant="contained" onClick={handleBulkDeactivateStock} disabled={stockDeactivating}
+            startIcon={stockDeactivating ? <CircularProgress size={16} color="inherit" /> : undefined}>
             {stockDeactivating ? 'Desactivando…' : 'Desactivar'}
           </Button>
         </DialogActions>

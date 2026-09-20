@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo } from 'react'
 import {
-  Box, Button, Card, Typography, Grid, Chip,
-  IconButton, Menu, MenuItem, Dialog, DialogTitle,
-  DialogContent, DialogActions, Skeleton, Divider, LinearProgress, Tooltip,
+  Box, Button, Card, Typography, IconButton, Menu, MenuItem, ListItemIcon, ListItemText,
+  Dialog, DialogTitle, DialogContent, DialogActions, Skeleton, Divider, LinearProgress,
+  Tooltip, CircularProgress, useTheme,
 } from '@mui/material'
 import {
   Add, MoreVert, Edit, Delete, PlayArrow, Receipt,
@@ -17,32 +17,57 @@ import { useWorkspaceStore } from '@/features/workspace/store/workspaceStore'
 import { useBudgetStore } from '../store/budgetStore'
 import { usePurchaseStore } from '@/features/purchases/store/purchaseStore'
 import { useAppStore } from '@/store/appStore'
+import LoadErrorBanner from '@/shared/components/LoadErrorBanner'
+import EmptyState from '@/shared/components/EmptyState'
+import { fmtMoney, fmtDate, fmtMonth } from '@/shared/utils/format'
 import BudgetForm from '../components/BudgetForm'
+import BudgetStatusChip from '../components/BudgetStatusChip'
 
-const STATUS_META = {
-  draft:     { label: 'Borrador',   bg: 'rgba(161,161,170,0.12)',  color: '#71717a' },
-  active:    { label: 'Activo',     bg: 'rgba(99,102,241,0.12)',   color: '#6366f1' },
-  completed: { label: 'Completado', bg: 'rgba(16,185,129,0.12)',   color: '#10b981' },
-  cancelled: { label: 'Cancelado',  bg: 'rgba(244,63,94,0.12)',    color: '#f43f5e' },
-}
+// Tamaños de la pantalla (escala de 4): 48 hero (36 en móvil) · 20 títulos/KPIs · 15 texto · 13 meta
+const FS = { hero: 48, heroXs: 36, title: 20, body: 15, meta: 13 }
+const NUM = { fontVariantNumeric: 'tabular-nums' }
 
-function StatCard({ label, value, color, sub }) {
+// Cada bloque entra una sola vez, escalonado (único momento orquestado)
+const reveal = (i) => ({ className: 'reveal', style: { '--i': i } })
+
+// ── Nivel 1: dato hero ───────────────────────────────────────────────────────
+// Total restante: déficit = coral con signo; el resto es neutro (el verde es solo para flujos positivos)
+function RemainingHero({ remaining }) {
+  const st = useTheme().palette.stock
+  const over = remaining < 0
+  const skin = over ? st.agotado : st.saludable
+  const Icon = over ? ErrorOutlined : Receipt
   return (
-    <Card sx={{ p: 2, height: '100%' }}>
-      <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.5 }}>
-        {label}
+    <Card sx={{ bgcolor: skin.tint, borderColor: skin.line, p: 3, display: 'flex', flexDirection: 'column', gap: 1, justifyContent: 'center' }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Icon sx={{ fontSize: 24, color: skin.icon }} />
+        <Typography component="h2" sx={{ fontSize: FS.body, fontWeight: 700 }}>Total restante</Typography>
+      </Box>
+      <Typography sx={{ ...NUM, fontSize: { xs: FS.heroXs, md: FS.hero }, fontWeight: 800, lineHeight: 1.1, letterSpacing: '-0.02em', color: skin.text }}>
+        {fmtMoney(remaining)}
       </Typography>
-      <Typography variant="h5" fontWeight={800} sx={{ letterSpacing: '-0.02em', color: color || 'text.primary' }}>
-        S/{value}
+      <Typography sx={{ fontSize: FS.body, fontWeight: 600 }}>
+        {over ? 'Excedido' : remaining === 0 ? 'Sin límites definidos' : 'Disponible'}
       </Typography>
-      {sub && (
-        <Typography variant="caption" color="text.disabled">{sub}</Typography>
-      )}
     </Card>
   )
 }
 
+function KpiCard({ label, value, sub, tone }) {
+  const st = useTheme().palette.stock
+  return (
+    <Card sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
+      <Typography sx={{ fontSize: FS.body, color: 'text.secondary' }}>{label}</Typography>
+      <Typography sx={{ ...NUM, fontSize: FS.title, fontWeight: 700, lineHeight: 1.3, color: tone === 'over' ? st.agotado.text : 'text.primary' }}>{value}</Typography>
+      {sub && <Typography sx={{ ...NUM, fontSize: FS.meta, color: 'text.secondary' }}>{sub}</Typography>}
+    </Card>
+  )
+}
+
+// ── Patrones de consumo ──────────────────────────────────────────────────────
 function ConsumptionChart({ purchases }) {
+  const theme = useTheme()
+  const st = theme.palette.stock
   const months = useMemo(() => {
     const byMonth = {}
     purchases.forEach((p) => {
@@ -53,10 +78,7 @@ function ConsumptionChart({ purchases }) {
     return Object.entries(byMonth)
       .sort(([a], [b]) => a.localeCompare(b))
       .slice(-6)
-      .map(([key, total]) => ({
-        label: new Date(key + '-02').toLocaleDateString('es-AR', { month: 'short', year: '2-digit' }),
-        total,
-      }))
+      .map(([key, total]) => ({ key, label: fmtMonth(key), total }))
   }, [purchases])
 
   if (months.length < 2) return null
@@ -66,71 +88,72 @@ function ConsumptionChart({ purchases }) {
   const prev = months[months.length - 2]
   const diff = prev.total > 0 ? ((last.total - prev.total) / prev.total) * 100 : null
 
+  // Subir el gasto avisa en coral; bajar es neutro (no es un flujo positivo)
   const TrendIcon = diff === null ? TrendingFlat : diff > 0 ? TrendingUp : TrendingDown
-  const trendColor = diff === null ? 'text.secondary' : diff > 0 ? 'error.main' : 'success.main'
+  const trendColor = diff !== null && diff > 0 ? st.agotado.text : theme.palette.text.secondary
+  const summary = `Patrones de consumo: ${months.map((m) => `${m.label} ${fmtMoney(m.total)}`).join(', ')}`
 
   return (
-    <Card sx={{ p: 2.5, mb: 3 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-        <Typography variant="subtitle2" fontWeight={700}>Patrones de consumo</Typography>
+    <Card sx={{ p: 3 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2, flexWrap: 'wrap', mb: 3 }}>
+        <Typography component="h2" sx={{ fontSize: FS.title, fontWeight: 700, lineHeight: 1.3 }}>Patrones de consumo</Typography>
         {diff !== null && (
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            <TrendIcon sx={{ fontSize: 16, color: trendColor }} />
-            <Typography variant="caption" sx={{ color: trendColor, fontWeight: 600 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: trendColor }}>
+            <TrendIcon sx={{ fontSize: 20 }} />
+            <Typography sx={{ ...NUM, fontSize: FS.body, fontWeight: 700, color: 'inherit' }}>
               {diff > 0 ? '+' : ''}{diff.toFixed(0)}% vs mes anterior
             </Typography>
           </Box>
         )}
       </Box>
-      <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-end', height: 80 }}>
+      <Box role="img" aria-label={summary} sx={{ display: 'flex', gap: 2, alignItems: 'flex-end', height: 112 }}>
         {months.map((m, i) => {
           const isLast = i === months.length - 1
           return (
-            <Tooltip key={i} title={`S/${m.total.toFixed(2)}`} placement="top">
-              <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.5, cursor: 'default' }}>
-                <Box
-                  sx={{
-                    width: '100%',
-                    height: Math.max((m.total / maxTotal) * 64, 4),
-                    bgcolor: isLast ? 'primary.main' : 'primary.light',
-                    borderRadius: '3px 3px 0 0',
-                    opacity: 0.5 + (i / months.length) * 0.5,
-                    transition: 'height 0.3s ease',
-                  }}
-                />
-                <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.6rem', textAlign: 'center', lineHeight: 1.2 }}>
-                  {m.label}
-                </Typography>
+            <Tooltip key={m.key} title={fmtMoney(m.total)} placement="top">
+              <Box tabIndex={0} sx={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, borderRadius: '8px' }}>
+                <Box sx={{ width: '100%', height: Math.max((m.total / maxTotal) * 80, 4), bgcolor: 'primary.main', opacity: isLast ? 1 : 0.4, borderRadius: '8px 8px 0 0' }} />
+                <Typography sx={{ ...NUM, fontSize: FS.meta, color: 'text.secondary', lineHeight: 1.2 }}>{m.label}</Typography>
               </Box>
             </Tooltip>
           )
         })}
       </Box>
-      <Box sx={{ mt: 1.5, pt: 1.5, borderTop: 1, borderColor: 'divider', display: 'flex', gap: 3 }}>
+      <Box sx={{ mt: 3, pt: 2, borderTop: 1, borderColor: 'divider', display: 'flex', gap: 4, flexWrap: 'wrap' }}>
         <Box>
-          <Typography variant="caption" color="text.disabled">Promedio mensual</Typography>
-          <Typography variant="body2" fontWeight={700}>
-            S/{(months.reduce((a, m) => a + m.total, 0) / months.length).toFixed(2)}
-          </Typography>
+          <Typography sx={{ fontSize: FS.meta, color: 'text.secondary' }}>Promedio mensual</Typography>
+          <Typography sx={{ ...NUM, fontSize: FS.body, fontWeight: 700 }}>{fmtMoney(months.reduce((a, m) => a + m.total, 0) / months.length)}</Typography>
         </Box>
         <Box>
-          <Typography variant="caption" color="text.disabled">Mayor gasto</Typography>
-          <Typography variant="body2" fontWeight={700}>
-            S/{Math.max(...months.map((m) => m.total)).toFixed(2)}
-          </Typography>
+          <Typography sx={{ fontSize: FS.meta, color: 'text.secondary' }}>Mayor gasto</Typography>
+          <Typography sx={{ ...NUM, fontSize: FS.body, fontWeight: 700 }}>{fmtMoney(Math.max(...months.map((m) => m.total)))}</Typography>
         </Box>
         <Box>
-          <Typography variant="caption" color="text.disabled">Meses analizados</Typography>
-          <Typography variant="body2" fontWeight={700}>{months.length}</Typography>
+          <Typography sx={{ fontSize: FS.meta, color: 'text.secondary' }}>Meses analizados</Typography>
+          <Typography sx={{ ...NUM, fontSize: FS.body, fontWeight: 700 }}>{months.length}</Typography>
         </Box>
       </Box>
     </Card>
   )
 }
 
+// ── Tarjeta de presupuesto ───────────────────────────────────────────────────
+function AlertBadge({ tone, Icon, label, tooltip }) {
+  const st = useTheme().palette.stock[tone]
+  return (
+    <Tooltip title={tooltip}>
+      <Box tabIndex={0} sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, px: 1, py: 0.5, borderRadius: '8px', bgcolor: st.tint, border: 1, borderColor: st.line, color: st.text }}>
+        <Icon sx={{ fontSize: 16, color: st.icon }} />
+        <Typography component="span" sx={{ fontSize: FS.meta, fontWeight: 700, color: 'inherit', lineHeight: 1.4 }}>{label}</Typography>
+      </Box>
+    </Tooltip>
+  )
+}
+
 function BudgetCard({ budget, isEditor, onEdit, onDelete, onActivate, onDuplicate, onOpen, spentAmount }) {
+  const st = useTheme().palette.stock
   const [anchorEl, setAnchorEl] = useState(null)
-  const meta = STATUS_META[budget.status] || STATUS_META.draft
+  const close = () => setAnchorEl(null)
 
   const spent = spentAmount || 0
   const limit = budget.target_amount || 0
@@ -138,150 +161,109 @@ function BudgetCard({ budget, isEditor, onEdit, onDelete, onActivate, onDuplicat
   const isOver = ratio > 1
   const isNear = ratio >= 0.8 && ratio <= 1
 
+  const openOnKey = (e) => {
+    if (e.target !== e.currentTarget) return
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen() }
+  }
+
   return (
     <Card
+      role="link"
+      tabIndex={0}
+      aria-label={`Abrir presupuesto ${budget.name}`}
       onClick={onOpen}
+      onKeyDown={openOnKey}
       sx={{
-        height: '100%',
-        display: 'flex',
-        flexDirection: 'column',
-        cursor: 'pointer',
-        overflow: 'hidden',
-        '&:hover': { borderColor: meta.color + '66', boxShadow: `0 4px 20px ${meta.color}18` },
-        transition: 'border-color 0.15s, box-shadow 0.15s',
+        height: '100%', display: 'flex', flexDirection: 'column', cursor: 'pointer', overflow: 'hidden',
+        transition: 'border-color 140ms, transform 140ms',
+        '&:hover': { borderColor: 'primary.main' },
       }}
     >
-      {/* Status stripe */}
-      <Box sx={{ height: 3, bgcolor: meta.color, flexShrink: 0 }} />
-
-      <Box sx={{ p: 2.5, flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
-        {/* Header */}
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
-          <Box sx={{ flexGrow: 1, minWidth: 0, mr: 1 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.75, flexWrap: 'wrap' }}>
-              <Chip
-                size="small"
-                label={meta.label}
-                sx={{
-                  bgcolor: meta.bg,
-                  color: meta.color,
-                  fontWeight: 700,
-                  fontSize: '0.6875rem',
-                  height: 22,
-                  border: `1px solid ${meta.color}33`,
-                }}
-              />
-              {isOver && (
-                <Tooltip title="Gasto real supera el límite del presupuesto">
-                  <Chip
-                    size="small"
-                    icon={<ErrorOutlined sx={{ fontSize: '13px !important' }} />}
-                    label="Excedido"
-                    sx={{ height: 22, fontSize: '0.6275rem', fontWeight: 700, bgcolor: 'rgba(244,63,94,0.1)', color: '#f43f5e', border: '1px solid rgba(244,63,94,0.3)' }}
-                  />
-                </Tooltip>
-              )}
-              {isNear && !isOver && (
-                <Tooltip title="Gasto real supera el 80% del límite">
-                  <Chip
-                    size="small"
-                    icon={<Warning sx={{ fontSize: '13px !important' }} />}
-                    label="Cerca del límite"
-                    sx={{ height: 22, fontSize: '0.6275rem', fontWeight: 700, bgcolor: 'rgba(245,158,11,0.1)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.3)' }}
-                  />
-                </Tooltip>
-              )}
+      <Box sx={{ p: 3, flexGrow: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 1 }}>
+          <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1, flexWrap: 'wrap' }}>
+              <BudgetStatusChip status={budget.status} />
+              {isOver && <AlertBadge tone="agotado" Icon={ErrorOutlined} label="Excedido" tooltip="Gasto real supera el límite del presupuesto" />}
+              {isNear && !isOver && <AlertBadge tone="riesgo" Icon={Warning} label="Cerca del límite" tooltip="Gasto real supera el 80% del límite" />}
             </Box>
-            <Typography variant="h6" fontWeight={700} noWrap sx={{ letterSpacing: '-0.01em' }}>
-              {budget.name}
-            </Typography>
+            <Typography component="h3" sx={{ fontSize: FS.title, fontWeight: 700, lineHeight: 1.3 }} noWrap>{budget.name}</Typography>
           </Box>
           {isEditor && (
             <>
               <IconButton
-                size="small"
+                aria-label={`Acciones de ${budget.name}`}
                 onClick={(e) => { e.stopPropagation(); setAnchorEl(e.currentTarget) }}
-                sx={{ mt: -0.5 }}
+                sx={{ flexShrink: 0 }}
               >
                 <MoreVert fontSize="small" />
               </IconButton>
               <Menu
                 anchorEl={anchorEl}
                 open={Boolean(anchorEl)}
-                onClose={(e) => { e?.stopPropagation?.(); setAnchorEl(null) }}
+                onClose={(e) => { e?.stopPropagation?.(); close() }}
                 onClick={(e) => e.stopPropagation()}
               >
-                <MenuItem onClick={() => { setAnchorEl(null); onEdit() }}>
-                  <Edit fontSize="small" sx={{ mr: 1.25, color: 'text.secondary' }} />Editar
+                <MenuItem onClick={() => { close(); onEdit() }}>
+                  <ListItemIcon><Edit fontSize="small" /></ListItemIcon><ListItemText>Editar</ListItemText>
                 </MenuItem>
                 {(budget.status === 'draft' || budget.status === 'completed') && (
-                  <MenuItem onClick={() => { setAnchorEl(null); onActivate() }}>
-                    <PlayArrow fontSize="small" sx={{ mr: 1.25, color: 'text.secondary' }} />
-                    {budget.status === 'completed' ? 'Reactivar' : 'Activar'}
+                  <MenuItem onClick={() => { close(); onActivate() }}>
+                    <ListItemIcon><PlayArrow fontSize="small" /></ListItemIcon>
+                    <ListItemText>{budget.status === 'completed' ? 'Reactivar' : 'Activar'}</ListItemText>
                   </MenuItem>
                 )}
-                <MenuItem onClick={() => { setAnchorEl(null); onDuplicate() }}>
-                  <ContentCopy fontSize="small" sx={{ mr: 1.25, color: 'text.secondary' }} />Duplicar
+                <MenuItem onClick={() => { close(); onDuplicate() }}>
+                  <ListItemIcon><ContentCopy fontSize="small" /></ListItemIcon><ListItemText>Duplicar</ListItemText>
                 </MenuItem>
                 <Divider sx={{ my: 0.5 }} />
-                <MenuItem onClick={() => { setAnchorEl(null); onDelete() }} sx={{ color: 'error.main' }}>
-                  <Delete fontSize="small" sx={{ mr: 1.25 }} />Eliminar
+                <MenuItem onClick={() => { close(); onDelete() }}>
+                  <ListItemIcon><Delete fontSize="small" /></ListItemIcon><ListItemText>Eliminar</ListItemText>
                 </MenuItem>
               </Menu>
             </>
           )}
         </Box>
 
-        {/* Meta info */}
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, flexGrow: 1 }}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, flexGrow: 1 }}>
           {budget.store && (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-              <Store sx={{ fontSize: 15, color: 'text.disabled' }} />
-              <Typography variant="body2" color="text.secondary">{budget.store}</Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Store sx={{ fontSize: 20, color: 'text.secondary' }} />
+              <Typography sx={{ fontSize: FS.body, color: 'text.secondary' }}>{budget.store}</Typography>
             </Box>
           )}
           {budget.date && (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-              <CalendarToday sx={{ fontSize: 15, color: 'text.disabled' }} />
-              <Typography variant="body2" color="text.secondary">
-                {new Date(budget.date).toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' })}
-              </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <CalendarToday sx={{ fontSize: 20, color: 'text.secondary' }} />
+              <Typography sx={{ ...NUM, fontSize: FS.body, color: 'text.secondary' }}>{fmtDate(budget.date)}</Typography>
             </Box>
           )}
         </Box>
 
-        {/* Budget amount + spending progress */}
         {limit > 0 && (
-          <Box sx={{ mt: 2, pt: 2, borderTop: 1, borderColor: 'divider' }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.75 }}>
+          <Box sx={{ pt: 2, borderTop: 1, borderColor: 'divider', display: 'flex', flexDirection: 'column', gap: 1 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 2 }}>
               <Box>
-                <Typography variant="caption" color="text.secondary">Límite</Typography>
-                <Typography variant="h6" fontWeight={800} sx={{ letterSpacing: '-0.02em', color: meta.color }}>
-                  S/{limit.toLocaleString('es-AR')}
-                </Typography>
+                <Typography sx={{ fontSize: FS.meta, color: 'text.secondary' }}>Límite</Typography>
+                <Typography sx={{ ...NUM, fontSize: FS.title, fontWeight: 700, lineHeight: 1.3 }}>{fmtMoney(limit)}</Typography>
               </Box>
-              {spent > 0 && (
+              {spent > 0 ? (
                 <Box sx={{ textAlign: 'right' }}>
-                  <Typography variant="caption" color="text.secondary">Gastado</Typography>
-                  <Typography variant="body2" fontWeight={700} color={isOver ? 'error.main' : 'text.primary'}>
-                    S/{spent.toFixed(2)}
-                  </Typography>
+                  <Typography sx={{ fontSize: FS.meta, color: 'text.secondary' }}>Gastado</Typography>
+                  <Typography sx={{ ...NUM, fontSize: FS.body, fontWeight: 700, color: isOver ? st.agotado.text : 'text.primary' }}>{fmtMoney(spent)}</Typography>
                 </Box>
+              ) : (
+                <ArrowForward sx={{ fontSize: 20, color: 'text.secondary' }} />
               )}
-              {spent === 0 && <ArrowForward sx={{ fontSize: 18, color: 'text.disabled' }} />}
             </Box>
             {spent > 0 && (
               <LinearProgress
+                aria-hidden
                 variant="determinate"
                 value={Math.min(ratio * 100, 100)}
                 sx={{
-                  height: 4,
-                  borderRadius: 2,
-                  bgcolor: 'action.hover',
-                  '& .MuiLinearProgress-bar': {
-                    bgcolor: isOver ? 'error.main' : isNear ? 'warning.main' : 'success.main',
-                    borderRadius: 2,
-                  },
+                  height: 8, bgcolor: 'action.hover',
+                  '& .MuiLinearProgress-bar': { bgcolor: isOver ? st.agotado.icon : isNear ? st.riesgo.icon : 'primary.main' },
                 }}
               />
             )}
@@ -289,17 +271,8 @@ function BudgetCard({ budget, isEditor, onEdit, onDelete, onActivate, onDuplicat
         )}
       </Box>
 
-      {/* Creator */}
-      <Box
-        sx={{
-          px: 2.5,
-          py: 1.25,
-          borderTop: 1,
-          borderColor: 'divider',
-          bgcolor: 'action.hover',
-        }}
-      >
-        <Typography variant="caption" color="text.disabled">
+      <Box sx={{ px: 3, py: 1.5, borderTop: 1, borderColor: 'divider', bgcolor: 'action.hover' }}>
+        <Typography sx={{ fontSize: FS.meta, color: 'text.secondary' }}>
           Creado por <strong>{budget.profiles?.full_name || 'usuario'}</strong>
         </Typography>
       </Box>
@@ -307,7 +280,11 @@ function BudgetCard({ budget, isEditor, onEdit, onDelete, onActivate, onDuplicat
   )
 }
 
+const GRID = { display: 'grid', gap: 2, gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }
+
 export default function BudgetsPage() {
+  const theme = useTheme()
+  const st = theme.palette.stock
   const navigate = useNavigate()
   const { user } = useAuthStore()
   const { currentWorkspace } = useWorkspaceStore()
@@ -317,13 +294,23 @@ export default function BudgetsPage() {
   const { enqueueSnackbar } = useSnackbar()
   const [formDialog, setFormDialog] = useState({ open: false, budget: null })
   const [deleteConfirm, setDeleteConfirm] = useState(null)
+  const [deleting, setDeleting] = useState(false)
+  const [loadError, setLoadError] = useState(null)
+  const [retryTick, setRetryTick] = useState(0)
 
+  // Mismas dos cargas de siempre; ahora se recoge el `{ error }` que ya devuelven
   useEffect(() => {
-    if (currentWorkspace) {
-      fetchBudgets(currentWorkspace.id)
-      fetchPurchases(currentWorkspace.id)
-    }
-  }, [currentWorkspace?.id, refreshSignal])
+    if (!currentWorkspace) return
+    let cancelled = false
+    Promise.all([fetchBudgets(currentWorkspace.id), fetchPurchases(currentWorkspace.id)])
+      .then((results) => {
+        if (cancelled) return
+        const failed = results.find((r) => r?.error)
+        setLoadError(failed ? { message: failed.error.message || 'Sin detalle del servidor' } : null)
+      })
+      .catch((e) => { if (!cancelled) setLoadError({ message: e?.message || 'Sin detalle del servidor' }) })
+    return () => { cancelled = true }
+  }, [currentWorkspace?.id, refreshSignal, retryTick])
 
   const spentByBudgetId = useMemo(() => {
     const map = {}
@@ -342,7 +329,9 @@ export default function BudgetsPage() {
   }, [budgets, spentByBudgetId])
 
   const handleDelete = async () => {
+    setDeleting(true)
     const { error } = await deleteBudget(deleteConfirm.id)
+    setDeleting(false)
     if (error) enqueueSnackbar('Error al eliminar', { variant: 'error' })
     else enqueueSnackbar('Presupuesto eliminado', { variant: 'success' })
     setDeleteConfirm(null)
@@ -364,156 +353,114 @@ export default function BudgetsPage() {
   }
 
   const isEditor = ['owner', 'editor'].includes(currentWorkspace?.my_role)
-  const active    = budgets.filter((b) => b.status === 'active')
-  const rest      = budgets.filter((b) => b.status !== 'active')
+  const active = budgets.filter((b) => b.status === 'active')
+  const rest = budgets.filter((b) => b.status !== 'active')
+  const showSkeleton = loading && budgets.length === 0
+  const failedWithoutData = Boolean(loadError) && budgets.length === 0
+  const openNew = () => setFormDialog({ open: true, budget: null })
+
+  const cardProps = (b) => ({
+    budget: b,
+    isEditor,
+    spentAmount: spentByBudgetId[b.id] || 0,
+    onOpen: () => navigate(`/budgets/${b.id}`),
+    onEdit: () => setFormDialog({ open: true, budget: b }),
+    onDelete: () => setDeleteConfirm(b),
+    onActivate: () => handleActivate(b),
+    onDuplicate: () => handleDuplicate(b),
+  })
+
+  // Objeto afectado al borrar: compras vinculadas y su gasto
+  const linked = purchases.filter((p) => p.budget_id === deleteConfirm?.id)
+  const linkedSpent = spentByBudgetId[deleteConfirm?.id] || 0
+  const deleteIsActive = deleteConfirm?.status === 'active'
 
   return (
-    <Box>
-      {/* Page header */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 3 }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+      {/* Header: título + única acción primaria */}
+      <Box {...reveal(0)} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
         <Box>
-          <Typography variant="h4" fontWeight={800} sx={{ letterSpacing: '-0.02em' }}>
-            Presupuestos
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
+          <Typography component="h1" sx={{ fontSize: FS.title, fontWeight: 800, lineHeight: 1.3, letterSpacing: '-0.01em' }}>Presupuestos</Typography>
+          <Typography sx={{ ...NUM, fontSize: FS.body, color: 'text.secondary' }}>
             {active.length > 0
               ? `${active.length} presupuesto${active.length > 1 ? 's' : ''} activo${active.length > 1 ? 's' : ''}`
               : 'Sin presupuestos activos'}
           </Typography>
         </Box>
-        {isEditor && (
-          <Button
-            startIcon={<Add />}
-            variant="contained"
-            onClick={() => setFormDialog({ open: true, budget: null })}
-          >
-            Nuevo
-          </Button>
-        )}
+        {isEditor && <Button startIcon={<Add />} variant="contained" onClick={openNew}>Nuevo</Button>}
       </Box>
 
-      {/* Summary stats */}
+      {loadError && (
+        <LoadErrorBanner message={loadError.message} onRetry={() => { setLoadError(null); setRetryTick((t) => t + 1) }} />
+      )}
+
+      {/* Nivel 1 y 2: hero + KPIs (solo con presupuestos) */}
+      {showSkeleton && (
+        <Box {...reveal(1)} sx={{ display: 'grid', gap: 3, gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: 'minmax(0, 5fr) minmax(0, 7fr)' } }}>
+          <Skeleton variant="rectangular" height={168} sx={{ borderRadius: '12px' }} />
+          <Skeleton variant="rectangular" height={168} sx={{ borderRadius: '12px' }} />
+        </Box>
+      )}
       {budgets.length > 0 && (
-        <Grid container spacing={2} sx={{ mb: 3 }}>
-          <Grid size={{ xs: 12, sm: 4 }}>
-            <StatCard
+        <Box {...reveal(1)} sx={{ display: 'grid', gap: 3, gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: 'minmax(0, 5fr) minmax(0, 7fr)' } }}>
+          <RemainingHero remaining={summaryStats.totalRemaining} />
+          <Box sx={{ display: 'grid', gap: { xs: 2, md: 3 }, gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))' } }}>
+            <KpiCard
               label="Total límites"
-              value={summaryStats.totalLimits.toFixed(2)}
+              value={fmtMoney(summaryStats.totalLimits)}
               sub={`${summaryStats.budgetsWithLimit} presupuesto${summaryStats.budgetsWithLimit !== 1 ? 's' : ''} con límite`}
             />
-          </Grid>
-          <Grid size={{ xs: 12, sm: 4 }}>
-            <StatCard
+            <KpiCard
               label="Total gastado"
-              value={summaryStats.totalSpent.toFixed(2)}
-              color={summaryStats.totalSpent > summaryStats.totalLimits && summaryStats.totalLimits > 0 ? 'error.main' : undefined}
+              value={fmtMoney(summaryStats.totalSpent)}
+              tone={summaryStats.totalSpent > summaryStats.totalLimits && summaryStats.totalLimits > 0 ? 'over' : undefined}
               sub={purchases.filter((p) => p.budget_id).length + ' compras vinculadas'}
             />
-          </Grid>
-          <Grid size={{ xs: 12, sm: 4 }}>
-            <StatCard
-              label="Total restante"
-              value={Math.abs(summaryStats.totalRemaining).toFixed(2)}
-              color={summaryStats.totalRemaining < 0 ? 'error.main' : summaryStats.totalRemaining === 0 ? 'text.secondary' : 'success.main'}
-              sub={summaryStats.totalRemaining < 0 ? 'Excedido' : summaryStats.totalRemaining === 0 ? 'Sin límites definidos' : 'Disponible'}
-            />
-          </Grid>
-        </Grid>
-      )}
-
-      {/* Consumption patterns */}
-      {purchases.length > 0 && <ConsumptionChart purchases={purchases} />}
-
-      {loading ? (
-        <Grid container spacing={2}>
-          {[1, 2, 3].map((i) => (
-            <Grid size={{ xs: 12, sm: 6, md: 4 }} key={i}>
-              <Skeleton variant="rectangular" height={200} sx={{ borderRadius: 2 }} />
-            </Grid>
-          ))}
-        </Grid>
-      ) : budgets.length === 0 ? (
-        <Box
-          sx={{
-            textAlign: 'center',
-            py: 8,
-            border: '1px dashed',
-            borderColor: 'divider',
-            borderRadius: 3,
-          }}
-        >
-          <Receipt sx={{ fontSize: 52, color: 'text.disabled', mb: 1.5 }} />
-          <Typography variant="h6" fontWeight={600} color="text.secondary" gutterBottom>
-            Sin presupuestos
-          </Typography>
-          <Typography variant="body2" color="text.disabled" sx={{ mb: 3 }}>
-            Crea un presupuesto para organizar tu próxima compra
-          </Typography>
-          {isEditor && (
-            <Button
-              variant="contained"
-              startIcon={<Add />}
-              onClick={() => setFormDialog({ open: true, budget: null })}
-            >
-              Crear presupuesto
-            </Button>
-          )}
-        </Box>
-      ) : (
-        <Box>
-          {/* Active budgets */}
-          {active.length > 0 && (
-            <Box sx={{ mb: 3 }}>
-              <Typography variant="overline" color="text.disabled" sx={{ mb: 1.5, display: 'block', px: 0.5 }}>
-                Activos
-              </Typography>
-              <Grid container spacing={2}>
-                {active.map((b) => (
-                  <Grid size={{ xs: 12, sm: 6, md: 4 }} key={b.id}>
-                    <BudgetCard
-                      budget={b}
-                      isEditor={isEditor}
-                      spentAmount={spentByBudgetId[b.id] || 0}
-                      onOpen={() => navigate(`/budgets/${b.id}`)}
-                      onEdit={() => setFormDialog({ open: true, budget: b })}
-                      onDelete={() => setDeleteConfirm(b)}
-                      onActivate={() => handleActivate(b)}
-                      onDuplicate={() => handleDuplicate(b)}
-                    />
-                  </Grid>
-                ))}
-              </Grid>
-            </Box>
-          )}
-
-          {/* Other budgets */}
-          {rest.length > 0 && (
-            <Box>
-              {active.length > 0 && (
-                <Typography variant="overline" color="text.disabled" sx={{ mb: 1.5, display: 'block', px: 0.5 }}>
-                  Otros
-                </Typography>
-              )}
-              <Grid container spacing={2}>
-                {rest.map((b) => (
-                  <Grid size={{ xs: 12, sm: 6, md: 4 }} key={b.id}>
-                    <BudgetCard
-                      budget={b}
-                      isEditor={isEditor}
-                      spentAmount={spentByBudgetId[b.id] || 0}
-                      onOpen={() => navigate(`/budgets/${b.id}`)}
-                      onEdit={() => setFormDialog({ open: true, budget: b })}
-                      onDelete={() => setDeleteConfirm(b)}
-                      onActivate={() => handleActivate(b)}
-                      onDuplicate={() => handleDuplicate(b)}
-                    />
-                  </Grid>
-                ))}
-              </Grid>
-            </Box>
-          )}
+          </Box>
         </Box>
       )}
+
+      {/* Patrones de consumo */}
+      {purchases.length > 0 && <Box {...reveal(2)}><ConsumptionChart purchases={purchases} /></Box>}
+
+      {/* Contenido */}
+      <Box {...reveal(3)}>
+        {showSkeleton ? (
+          <Box sx={GRID}>
+            {[1, 2, 3].map((i) => <Skeleton key={i} variant="rectangular" height={240} sx={{ borderRadius: '12px' }} />)}
+          </Box>
+        ) : failedWithoutData ? null : budgets.length === 0 ? (
+          <EmptyState
+            icon={<Receipt sx={{ fontSize: 28 }} />}
+            title="Sin presupuestos"
+            body="Crea un presupuesto para organizar tu próxima compra"
+            action={isEditor && <Button variant="contained" startIcon={<Add />} onClick={openNew}>Crear presupuesto</Button>}
+          />
+        ) : (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {active.length > 0 && (
+              <Box component="section">
+                <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1, mb: 2 }}>
+                  <Typography component="h2" sx={{ fontSize: FS.title, fontWeight: 700, lineHeight: 1.3 }}>Activos</Typography>
+                  <Typography sx={{ ...NUM, fontSize: FS.body, color: 'text.secondary' }}>{active.length}</Typography>
+                </Box>
+                <Box sx={GRID}>{active.map((b) => <BudgetCard key={b.id} {...cardProps(b)} />)}</Box>
+              </Box>
+            )}
+            {rest.length > 0 && (
+              <Box component="section">
+                {active.length > 0 && (
+                  <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1, mb: 2 }}>
+                    <Typography component="h2" sx={{ fontSize: FS.title, fontWeight: 700, lineHeight: 1.3 }}>Otros</Typography>
+                    <Typography sx={{ ...NUM, fontSize: FS.body, color: 'text.secondary' }}>{rest.length}</Typography>
+                  </Box>
+                )}
+                <Box sx={GRID}>{rest.map((b) => <BudgetCard key={b.id} {...cardProps(b)} />)}</Box>
+              </Box>
+            )}
+          </Box>
+        )}
+      </Box>
 
       <BudgetForm
         open={formDialog.open}
@@ -523,51 +470,45 @@ export default function BudgetsPage() {
         onClose={() => setFormDialog({ open: false, budget: null })}
       />
 
-      <Dialog open={Boolean(deleteConfirm)} onClose={() => setDeleteConfirm(null)} maxWidth="xs" fullWidth>
-        <DialogTitle sx={{ pb: 1 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Delete sx={{ color: 'error.main' }} />
+      <Dialog open={Boolean(deleteConfirm)} onClose={deleting ? undefined : () => setDeleteConfirm(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Box sx={{ p: 1, bgcolor: 'error.main', borderRadius: '8px', color: 'error.contrastText', display: 'flex' }}>
+              <Delete sx={{ fontSize: 24 }} />
+            </Box>
             Eliminar presupuesto
           </Box>
         </DialogTitle>
-        <DialogContent sx={{ pt: 1 }}>
-          {(() => {
-            const linked = purchases.filter((p) => p.budget_id === deleteConfirm?.id)
-            const spent = spentByBudgetId[deleteConfirm?.id] || 0
-            const isActive = deleteConfirm?.status === 'active'
-            return (
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-                <Typography>
-                  ¿Eliminar <strong>"{deleteConfirm?.name}"</strong>? Esta acción no se puede deshacer.
-                </Typography>
-                {isActive && (
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 1.25, borderRadius: 1.5, bgcolor: 'rgba(244,63,94,0.08)', border: '1px solid rgba(244,63,94,0.25)' }}>
-                    <Warning sx={{ fontSize: 18, color: 'error.main', flexShrink: 0 }} />
-                    <Typography variant="body2" color="error.main" fontWeight={600}>
-                      Este presupuesto está activo actualmente.
-                    </Typography>
-                  </Box>
-                )}
-                {linked.length > 0 && (
-                  <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, p: 1.25, borderRadius: 1.5, bgcolor: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.25)' }}>
-                    <Warning sx={{ fontSize: 18, color: 'warning.main', flexShrink: 0, mt: 0.1 }} />
-                    <Box>
-                      <Typography variant="body2" color="warning.main" fontWeight={600}>
-                        Tiene {linked.length} compra{linked.length !== 1 ? 's' : ''} vinculada{linked.length !== 1 ? 's' : ''}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        Las compras no se eliminarán, pero quedarán sin presupuesto asignado. Total gastado: <strong>S/{spent.toFixed(2)}</strong>
-                      </Typography>
-                    </Box>
-                  </Box>
-                )}
+        <DialogContent>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <Typography sx={{ fontSize: FS.body }}>
+              ¿Eliminar <strong>"{deleteConfirm?.name}"</strong>? Esta acción no se puede deshacer.
+            </Typography>
+            {deleteIsActive && (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 1.5, borderRadius: '8px', bgcolor: st.riesgo.tint, border: 1, borderColor: st.riesgo.line }}>
+                <Warning sx={{ fontSize: 20, color: st.riesgo.icon, flexShrink: 0 }} />
+                <Typography sx={{ fontSize: FS.body, fontWeight: 600, color: st.riesgo.text }}>Este presupuesto está activo actualmente.</Typography>
               </Box>
-            )
-          })()}
+            )}
+            {linked.length > 0 && (
+              <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, p: 1.5, borderRadius: '8px', bgcolor: st.riesgo.tint, border: 1, borderColor: st.riesgo.line }}>
+                <Warning sx={{ fontSize: 20, color: st.riesgo.icon, flexShrink: 0 }} />
+                <Box>
+                  <Typography sx={{ fontSize: FS.body, fontWeight: 600, color: st.riesgo.text }}>
+                    Tiene {linked.length} compra{linked.length !== 1 ? 's' : ''} vinculada{linked.length !== 1 ? 's' : ''}
+                  </Typography>
+                  <Typography sx={{ ...NUM, fontSize: FS.meta, color: 'text.secondary' }}>
+                    Las compras no se eliminarán, pero quedarán sin presupuesto asignado. Total gastado: <strong>{fmtMoney(linkedSpent)}</strong>
+                  </Typography>
+                </Box>
+              </Box>
+            )}
+          </Box>
         </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => setDeleteConfirm(null)}>Cancelar</Button>
-          <Button variant="contained" color="error" onClick={handleDelete} startIcon={<Delete />}>
+        <DialogActions>
+          <Button onClick={() => setDeleteConfirm(null)} disabled={deleting}>Cancelar</Button>
+          <Button variant="contained" color="error" onClick={handleDelete} disabled={deleting}
+            startIcon={deleting ? <CircularProgress size={16} color="inherit" /> : <Delete />}>
             Eliminar
           </Button>
         </DialogActions>

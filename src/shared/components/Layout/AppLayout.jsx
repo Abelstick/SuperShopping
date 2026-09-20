@@ -44,38 +44,17 @@ function NavItem({ item, location, onClick }) {
 
   return (
     <Box sx={{ position: 'relative', mb: 0.25 }}>
-      {isActive && (
-        <Box
-          sx={{
-            position: 'absolute',
-            left: 0,
-            top: '50%',
-            transform: 'translateY(-50%)',
-            width: 3,
-            height: 22,
-            bgcolor: 'primary.main',
-            borderRadius: '0 3px 3px 0',
-            zIndex: 1,
-          }}
-        />
-      )}
       <ListItemButton
         onClick={onClick}
         selected={isActive}
+        aria-current={isActive ? 'page' : undefined}
         sx={{
           pl: 1.5,
-          py: '7px',
-          borderRadius: 2,
-          '& .MuiListItemIcon-root': {
-            color: isActive ? 'primary.main' : 'text.secondary',
-            minWidth: 34,
-            transition: 'color 0.12s',
-          },
+          '& .MuiListItemIcon-root': { color: isActive ? 'primary.main' : 'text.secondary', minWidth: 36 },
           '& .MuiListItemText-primary': {
-            fontWeight: isActive ? 600 : 500,
-            fontSize: '0.875rem',
-            color: isActive ? 'text.primary' : 'text.secondary',
-            transition: 'color 0.12s',
+            fontWeight: isActive ? 700 : 500,
+            fontSize: '0.9375rem',
+            color: isActive ? 'primary.main' : 'text.primary',
           },
         }}
       >
@@ -129,21 +108,20 @@ export default function AppLayout() {
           flexShrink: 0,
         }}
       >
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
           <Box
             sx={{
               width: 32,
               height: 32,
-              borderRadius: '9px',
-              background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
+              borderRadius: '8px',
+              bgcolor: 'primary.main',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               flexShrink: 0,
-              boxShadow: '0 2px 8px rgba(99,102,241,0.4)',
             }}
           >
-            <ShoppingCartCheckout sx={{ color: '#fff', fontSize: 17 }} />
+            <ShoppingCartCheckout sx={{ color: 'primary.contrastText', fontSize: 20 }} />
           </Box>
           <Typography
             variant="subtitle1"
@@ -155,7 +133,7 @@ export default function AppLayout() {
         </Box>
         {!isMobile && (
           <Tooltip title="Colapsar" placement="right">
-            <IconButton size="small" onClick={toggleSidebar} sx={{ opacity: 0.4, '&:hover': { opacity: 1 } }}>
+            <IconButton size="small" onClick={toggleSidebar} aria-label="Colapsar" sx={{ color: 'text.secondary' }}>
               <ChevronLeft fontSize="small" />
             </IconButton>
           </Tooltip>
@@ -166,36 +144,40 @@ export default function AppLayout() {
       {currentWorkspace && (
         <Box sx={{ px: 1.5, pb: 1.5 }}>
           <Box
+            role="button"
+            tabIndex={0}
             onClick={() => handleNav('/workspaces')}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleNav('/workspaces') } }}
             sx={{
               display: 'flex',
               alignItems: 'center',
               gap: 1,
               px: 1.5,
-              py: 0.875,
-              borderRadius: 2,
+              py: 1,
+              minHeight: 44,
+              borderRadius: '8px',
               cursor: 'pointer',
               border: '1px solid',
               borderColor: 'divider',
-              transition: 'all 0.12s',
+              transition: 'background-color 120ms, border-color 120ms',
               '&:hover': { borderColor: 'primary.main', bgcolor: 'action.hover' },
             }}
           >
-            <Home sx={{ fontSize: 15, color: 'text.secondary' }} />
+            <Home sx={{ fontSize: 16, color: 'text.secondary' }} />
             <Typography
               variant="body2"
               fontWeight={600}
               noWrap
-              sx={{ flexGrow: 1, fontSize: '0.8125rem' }}
+              sx={{ flexGrow: 1, fontSize: '0.9375rem' }}
             >
               {currentWorkspace.name}
             </Typography>
             <Box
               sx={{
-                width: 6,
-                height: 6,
+                width: 8,
+                height: 8,
                 borderRadius: '50%',
-                bgcolor: 'success.main',
+                bgcolor: 'primary.main',
                 flexShrink: 0,
               }}
             />
@@ -208,8 +190,8 @@ export default function AppLayout() {
       {/* Main navigation */}
       <List disablePadding sx={{ px: 1.5, pt: 1, flexGrow: 1 }}>
         <Typography
-          variant="overline"
-          color="text.disabled"
+          variant="caption"
+          color="text.secondary"
           sx={{ px: 1.5, mb: 0.5, display: 'block' }}
         >
           Menú
@@ -243,15 +225,18 @@ export default function AppLayout() {
       {/* User section */}
       <Box sx={{ p: 1.5 }}>
         <Box
+          role="button"
+          tabIndex={0}
           onClick={(e) => setUserMenuAnchor(e.currentTarget)}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setUserMenuAnchor(e.currentTarget) } }}
           sx={{
             display: 'flex',
             alignItems: 'center',
-            gap: 1.25,
-            p: 1.25,
-            borderRadius: 2,
+            gap: 1.5,
+            p: 1.5,
+            borderRadius: '8px',
             cursor: 'pointer',
-            transition: 'background 0.12s',
+            transition: 'background-color 120ms',
             '&:hover': { bgcolor: 'action.hover' },
           }}
         >
@@ -273,7 +258,7 @@ export default function AppLayout() {
               variant="body2"
               fontWeight={600}
               noWrap
-              sx={{ fontSize: '0.8125rem', lineHeight: 1.3 }}
+              sx={{ fontSize: '0.9375rem', lineHeight: 1.4 }}
             >
               {profile?.full_name || 'Usuario'}
             </Typography>
@@ -281,7 +266,7 @@ export default function AppLayout() {
               variant="caption"
               color="text.secondary"
               noWrap
-              sx={{ display: 'block', fontSize: '0.6875rem' }}
+              sx={{ display: 'block', fontSize: '0.8125rem' }}
             >
               {user?.email}
             </Typography>
@@ -322,13 +307,13 @@ export default function AppLayout() {
                 width: 28,
                 height: 28,
                 borderRadius: '8px',
-                background: 'linear-gradient(135deg, #6366f1, #4f46e5)',
+                bgcolor: 'primary.main',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
               }}
             >
-              <ShoppingCartCheckout sx={{ color: '#fff', fontSize: 15 }} />
+              <ShoppingCartCheckout sx={{ color: 'primary.contrastText', fontSize: 16 }} />
             </Box>
             <Typography variant="subtitle2" fontWeight={800} sx={{ letterSpacing: '-0.02em' }}>
               SuperShopping
@@ -348,7 +333,10 @@ export default function AppLayout() {
 
           <IconButton
             size="small"
-            onClick={(e) => setUserMenuAnchor(e.currentTarget)}
+            role="button"
+          tabIndex={0}
+          onClick={(e) => setUserMenuAnchor(e.currentTarget)}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setUserMenuAnchor(e.currentTarget) } }}
             sx={{ ml: 0.5 }}
           >
             <Avatar
@@ -411,7 +399,7 @@ export default function AppLayout() {
             flexGrow: 1,
             p: { xs: 2, sm: 3 },
             pb: { xs: 10, md: 4 },
-            maxWidth: 1400,
+            maxWidth: 1440,
             width: '100%',
             mx: 'auto',
           }}

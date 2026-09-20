@@ -1,56 +1,68 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Link as RouterLink } from 'react-router-dom'
-import { Box, Card, CardContent, TextField, Button, Typography, Link, Alert } from '@mui/material'
-import { ShoppingCart } from '@mui/icons-material'
+import { Box, TextField, Button, Typography, Link, Alert, InputAdornment, CircularProgress } from '@mui/material'
+import { Email } from '@mui/icons-material'
 import { useAuthStore } from '../store/authStore'
+import AuthShell from '../components/AuthShell'
+import { validateEmail } from '../validation'
 
 export default function ForgotPasswordPage() {
   const { resetPassword } = useAuthStore()
   const [email, setEmail] = useState('')
+  const [emailError, setEmailError] = useState('')
   const [loading, setLoading] = useState(false)
   const [sent, setSent] = useState(false)
   const [error, setError] = useState('')
+  const emailRef = useRef(null)
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
+    const err = validateEmail(email)
+    setEmailError(err)
+    if (err) { emailRef.current?.focus(); return }
     setLoading(true)
-    const { error: err } = await resetPassword(email)
+    const { error: resetErr } = await resetPassword(email)
     setLoading(false)
-    if (err) setError(err.message)
+    if (resetErr) setError(resetErr.message)
     else setSent(true)
   }
 
   return (
-    <Box sx={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'background.default', p: 2 }}>
-      <Card sx={{ width: '100%', maxWidth: 400 }}>
-        <CardContent sx={{ p: 4 }}>
-          <Box sx={{ textAlign: 'center', mb: 3 }}>
-            <ShoppingCart sx={{ fontSize: 48, color: 'primary.main', mb: 1 }} />
-            <Typography variant="h5" fontWeight={700}>Recuperar contraseña</Typography>
+    <AuthShell panel="none" heading="Recuperar contraseña">
+      {sent ? (
+        <Alert severity="success" role="status">
+          Se envió un enlace de recuperación a <strong>{email}</strong>. Revisa tu bandeja de entrada.
+        </Alert>
+      ) : (
+        <>
+          {error && <Alert severity="warning" role="alert" onClose={() => setError('')}>{error}</Alert>}
+          <Box component="form" onSubmit={handleSubmit} noValidate sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+            <TextField
+              fullWidth required autoFocus
+              label="Email" name="email" type="email" value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              onBlur={() => setEmailError(validateEmail(email))}
+              error={Boolean(emailError)} helperText={emailError || ' '}
+              inputRef={emailRef}
+              slotProps={{
+                htmlInput: { autoComplete: 'email' },
+                input: { startAdornment: <InputAdornment position="start"><Email sx={{ color: 'text.secondary', fontSize: 20 }} /></InputAdornment> },
+              }}
+            />
+            <Button
+              fullWidth variant="contained" type="submit" size="large" disabled={loading}
+              startIcon={loading ? <CircularProgress size={16} color="inherit" /> : undefined}
+            >
+              {loading ? 'Enviando...' : 'Enviar enlace'}
+            </Button>
           </Box>
+        </>
+      )}
 
-          {sent ? (
-            <Alert severity="success">
-              Se envió un enlace de recuperación a <strong>{email}</strong>. Revisa tu bandeja de entrada.
-            </Alert>
-          ) : (
-            <>
-              {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-              <form onSubmit={handleSubmit}>
-                <TextField fullWidth label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required sx={{ mb: 3 }} />
-                <Button fullWidth variant="contained" type="submit" disabled={loading} size="large">
-                  {loading ? 'Enviando...' : 'Enviar enlace'}
-                </Button>
-              </form>
-            </>
-          )}
-
-          <Box sx={{ mt: 3, textAlign: 'center' }}>
-            <Link component={RouterLink} to="/auth/login" variant="body2">Volver al login</Link>
-          </Box>
-        </CardContent>
-      </Card>
-    </Box>
+      <Typography sx={{ fontSize: 15, textAlign: 'center' }}>
+        <Link component={RouterLink} to="/auth/login" sx={{ fontWeight: 600 }}>Volver al login</Link>
+      </Typography>
+    </AuthShell>
   )
 }

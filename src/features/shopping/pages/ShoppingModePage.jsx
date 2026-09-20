@@ -2,17 +2,14 @@ import { useEffect, useRef, useState } from 'react'
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import {
-  Box, Typography, Card, CardContent, List,
-  IconButton, Chip, Avatar, AvatarGroup, Button, Divider,
-  Dialog, DialogTitle, DialogContent, DialogActions, TextField,
-  Grid, LinearProgress, Tooltip, Fab, CircularProgress,
-  Stack, Collapse, alpha, useTheme, Checkbox, FormControlLabel, Switch,
-  Autocomplete, FormControl, InputLabel, Select, MenuItem,
+  Box, Typography, Card, IconButton, Avatar, AvatarGroup, Button, Divider,
+  Dialog, DialogTitle, DialogContent, DialogActions,
+  LinearProgress, Tooltip, Fab, CircularProgress, Checkbox, Skeleton, useTheme,
 } from '@mui/material'
+import { alpha } from '@mui/material/styles'
 import {
   ShoppingCart, Lock, LockOpen, Add, CheckCircle,
-  ArrowBack, Done, Delete, ExpandMore, ExpandLess, Store, Edit,
-  RadioButtonUnchecked,
+  ArrowBack, Done, Delete, ExpandMore, ExpandLess, Store, Edit, ErrorOutlined, Receipt,
 } from '@mui/icons-material'
 import { useSnackbar } from 'notistack'
 import { useAuthStore } from '@/features/auth/store/authStore'
@@ -21,275 +18,36 @@ import { useBudgetStore } from '@/features/budgets/store/budgetStore'
 import { useInventoryStore } from '@/features/inventory/store/inventoryStore'
 import { useShoppingStore } from '../store/shoppingStore'
 import { usePurchaseStore } from '@/features/purchases/store/purchaseStore'
+import { useAppStore } from '@/store/appStore'
 import AdjustTotalDialog from '@/features/purchases/components/AdjustTotalDialog'
 import EditPurchaseItemDialog from '@/features/purchases/components/EditPurchaseItemDialog'
-import { UNITS } from '@/shared/constants/units'
+import LoadErrorBanner from '@/shared/components/LoadErrorBanner'
+import EmptyState from '@/shared/components/EmptyState'
+import { fmtMoney } from '@/shared/utils/format'
+import AddItemDialog from '../components/AddItemDialog'
 
-// ── Add Item Dialog ──────────────────────────────────────────────────────────
-function AddItemDialog({ open, budgetItem, sessionId, purchaseId, userId, workspaceId, products, categories, onClose }) {
-  const { addPurchaseItem, unlockItem } = useShoppingStore()
-  const { enqueueSnackbar } = useSnackbar()
-  const [form, setForm] = useState({
-    product_name: '', product_id: '', brand: '', quantity: 1, unit_price: '', unit: 'unidad', category_id: '', is_household: true,
-  })
-  const [saving, setSaving] = useState(false)
-  const [multiplyQty, setMultiplyQty] = useState(false)
-  const [priceHint, setPriceHint] = useState(null)
+// Tamaños de la pantalla (escala de 4): 48 hero (36 en móvil) · 20 títulos/KPIs · 15 texto · 13 meta
+const FS = { hero: 48, heroXs: 36, title: 20, body: 15, meta: 13 }
+const NUM = { fontVariantNumeric: 'tabular-nums' }
+const DRAWER_WIDTH = 252
+const APPBAR_HEIGHT = 52
 
-  useEffect(() => {
-    if (open) {
-      setForm({
-        product_name: budgetItem?.product_name ?? '',
-        product_id: budgetItem?.product_id ?? '',
-        brand: '',
-        quantity: budgetItem?.quantity ?? 1,
-        unit_price: budgetItem?.estimated_price ?? '',
-        unit: budgetItem?.unit ?? 'unidad',
-        category_id: budgetItem?.category_id ?? '',
-        is_household: true,
-      })
-      setMultiplyQty(false)
-      setPriceHint(null)
-    }
-  }, [open, budgetItem])
-
-  // Fetch historical prices for this product, whether it came from the budget
-  // item or was just picked from the inventory autocomplete below.
-  useEffect(() => {
-    if (!open || !form.product_id) { setPriceHint(null); return }
-    supabase
-      .from('purchase_items')
-      .select('unit_price, unit, quantity')
-      .eq('product_id', form.product_id)
-      .not('unit_price', 'is', null)
-      .order('created_at', { ascending: false })
-      .limit(10)
-      .then(({ data }) => {
-        if (!data || data.length === 0) { setPriceHint(null); return }
-        const prices = data.map((d) => Number(d.unit_price))
-        const avg = prices.reduce((a, b) => a + b, 0) / prices.length
-        // Most recent purchase's own quantity/unit/price — the average above
-        // can blend older records bought in a different unit, but this is
-        // exactly what was bought and paid last time.
-        setPriceHint({
-          avg, count: prices.length, min: Math.min(...prices), max: Math.max(...prices),
-          unit: data[0].unit, lastQuantity: data[0].quantity, lastPrice: Number(data[0].unit_price),
-        })
-      })
-  }, [open, form.product_id])
-
-  const total = multiplyQty
-    ? Number(form.quantity || 0) * Number(form.unit_price || 0)
-    : Number(form.unit_price || 0)
-
-  const priceDiff = priceHint && form.unit_price
-    ? ((Number(form.unit_price) - priceHint.avg) / priceHint.avg) * 100
-    : null
-
-  const linkedCategory = categories.find((c) => c.id === form.category_id)
-
-  const handleProductPick = (value) => {
-    if (value && typeof value === 'object') {
-      setForm((f) => ({ ...f, product_name: value.name, product_id: value.id, unit: value.unit, category_id: value.category_id || '' }))
-    } else {
-      setForm((f) => ({ ...f, product_name: value || '', product_id: '' }))
-    }
-  }
-
-  const handleSave = async () => {
-    if (!form.product_name.trim()) return
-    setSaving(true)
-    const { error } = await addPurchaseItem(
-      sessionId, purchaseId,
-      {
-        product_name: form.product_name.trim(),
-        brand: form.brand.trim() || null,
-        quantity: Number(form.quantity),
-        unit_price: form.unit_price ? Number(form.unit_price) : null,
-        total_price: total || null,
-        unit: form.unit,
-        budget_item_id: budgetItem?.id ?? null,
-        product_id: form.product_id || null,
-        category_id: form.category_id || null,
-        is_household: form.is_household,
-      },
-      userId,
-      workspaceId,
-    )
-    setSaving(false)
-    if (error) { enqueueSnackbar('Error al agregar el producto', { variant: 'error' }); return }
-    if (budgetItem) await unlockItem(sessionId, budgetItem.id)
-    enqueueSnackbar(`"${form.product_name}" agregado`, { variant: 'success' })
-    onClose()
-  }
-
+// ── Lista con nombres para las confirmaciones ────────────────────────────────
+function NameList({ names }) {
+  const shown = names.slice(0, 5)
+  const rest = names.length - shown.length
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth slotProps={{ paper: { sx: { borderRadius: 3 } } }}>
-      <DialogTitle sx={{ pb: 1 }}>
-        <Typography variant="h6" fontWeight={700}>
-          {budgetItem ? `Comprar: ${budgetItem.product_name}` : 'Agregar producto'}
-        </Typography>
-        {!budgetItem && (
-          <Typography variant="caption" color="text.secondary">
-            Si no está en el inventario, se creará automáticamente.
-          </Typography>
-        )}
-      </DialogTitle>
-      <DialogContent>
-        <Stack spacing={2} sx={{ mt: 1 }}>
-          {budgetItem ? (
-            <TextField
-              fullWidth label="Producto *" value={form.product_name}
-              onChange={(e) => setForm((f) => ({ ...f, product_name: e.target.value }))}
-              size="medium"
-            />
-          ) : (
-            <Autocomplete
-              freeSolo
-              autoHighlight
-              options={products}
-              getOptionLabel={(opt) => (typeof opt === 'string' ? opt : opt.name)}
-              inputValue={form.product_name}
-              onInputChange={(e, newInputValue, reason) => {
-                if (reason === 'input') setForm((f) => ({ ...f, product_name: newInputValue, product_id: '' }))
-              }}
-              onChange={(e, value) => handleProductPick(value)}
-              noOptionsText="Sin coincidencias — se creará un producto nuevo"
-              renderOption={(props, option) => (
-                <Box component="li" {...props} key={option.id} sx={{ flexDirection: 'column', alignItems: 'flex-start !important', gap: 0.25 }}>
-                  <Typography variant="body2" fontWeight={500}>{option.name}</Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    {option.current_quantity} {option.unit} en stock{option.categories?.name ? ` · ${option.categories.name}` : ''}
-                  </Typography>
-                </Box>
-              )}
-              renderInput={(params) => (
-                <TextField {...params} label="Producto *" placeholder="Buscar en tu inventario o escribir uno nuevo…" autoFocus />
-              )}
-            />
-          )}
-
-          {!budgetItem && (
-            form.product_id ? (
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                <Chip
-                  size="small" color="primary" variant="outlined"
-                  label={`Vinculado a tu inventario${linkedCategory ? ` · ${linkedCategory.name}` : ''}`}
-                />
-                <Button size="small" onClick={() => setForm((f) => ({ ...f, product_id: '' }))} sx={{ fontSize: '0.7rem', minHeight: 32 }}>
-                  No es este producto
-                </Button>
-              </Box>
-            ) : form.product_name.trim() && (
-              <FormControl fullWidth>
-                <InputLabel>Categoría (producto nuevo)</InputLabel>
-                <Select
-                  value={form.category_id}
-                  label="Categoría (producto nuevo)"
-                  onChange={(e) => setForm((f) => ({ ...f, category_id: e.target.value }))}
-                >
-                  <MenuItem value=""><Typography color="text.secondary" variant="body2">Sin categoría</Typography></MenuItem>
-                  {categories.map((c) => (
-                    <MenuItem key={c.id} value={c.id}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: c.color, flexShrink: 0 }} />
-                        {c.name}
-                      </Box>
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            )
-          )}
-
-          <TextField
-            fullWidth label="Marca (opcional)" value={form.brand}
-            onChange={(e) => setForm((f) => ({ ...f, brand: e.target.value }))}
-          />
-          <Grid container spacing={1.5}>
-            <Grid size={{ xs: 6 }}>
-              <TextField
-                fullWidth type="number" label="Cant." value={form.quantity}
-                onChange={(e) => setForm((f) => ({ ...f, quantity: e.target.value }))}
-                slotProps={{ htmlInput: { min: 0.01, step: 0.01 } }}
-              />
-            </Grid>
-            <Grid size={{ xs: 6 }}>
-              <FormControl fullWidth>
-                <InputLabel>Unidad</InputLabel>
-                <Select value={form.unit} label="Unidad" onChange={(e) => setForm((f) => ({ ...f, unit: e.target.value }))}>
-                  {UNITS.map((u) => <MenuItem key={u} value={u}>{u}</MenuItem>)}
-                </Select>
-              </FormControl>
-            </Grid>
-            <Grid size={{ xs: 12 }}>
-              <TextField
-                fullWidth type="number" label="Precio"
-                value={form.unit_price}
-                onChange={(e) => setForm((f) => ({ ...f, unit_price: e.target.value }))}
-                slotProps={{ input: { startAdornment: <Box component="span" sx={{ mr: 0.5, color: 'text.secondary', fontSize: 14 }}>S/</Box> } }}
-              />
-            </Grid>
-          </Grid>
-
-          {/* Price history hint */}
-          {priceHint && (
-            <Box sx={{ mt: -1 }}>
-              <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                Última compra: {priceHint.lastQuantity} {priceHint.unit} · S/{priceHint.lastPrice.toFixed(2)}
-              </Typography>
-              {form.unit_price && (
-                <Typography
-                  variant="caption"
-                  sx={{ display: 'block' }}
-                  color={priceDiff > 15 ? 'error.main' : priceDiff < -15 ? 'success.main' : 'text.secondary'}
-                >
-                  Historial ({priceHint.count} compras): S/{priceHint.avg.toFixed(2)} / {priceHint.unit}
-                  {priceDiff !== null && ` · ${priceDiff > 0 ? '+' : ''}${Math.round(priceDiff)}% vs. habitual`}
-                </Typography>
-              )}
-            </Box>
-          )}
-
-          <FormControlLabel
-            control={<Checkbox size="small" checked={multiplyQty} onChange={(e) => setMultiplyQty(e.target.checked)} />}
-            label={<Typography variant="caption" color="text.secondary">Multiplicar por cantidad</Typography>}
-            sx={{ m: 0 }}
-          />
-          {total > 0 && (
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', p: 1.5, bgcolor: 'action.hover', borderRadius: 2 }}>
-              <Typography variant="body2" color="text.secondary">{multiplyQty ? 'Subtotal' : 'Total'}</Typography>
-              <Typography variant="h6" fontWeight={700} color="primary">S/{total.toFixed(2)}</Typography>
-            </Box>
-          )}
-
-          {/* Household classification */}
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 0.5, py: 0.5, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
-            <Box>
-              <Typography variant="body2" fontWeight={500}>Gasto del hogar</Typography>
-              <Typography variant="caption" color="text.secondary">Desactiva para regalos o gastos excepcionales</Typography>
-            </Box>
-            <Switch
-              size="small"
-              checked={form.is_household}
-              onChange={(e) => setForm((f) => ({ ...f, is_household: e.target.checked }))}
-            />
-          </Box>
-        </Stack>
-      </DialogContent>
-      <DialogActions sx={{ px: 3, pb: 3 }}>
-        <Button onClick={onClose} color="inherit">Cancelar</Button>
-        <Button variant="contained" onClick={handleSave} disabled={saving || !form.product_name.trim()} fullWidth>
-          {saving ? 'Guardando…' : 'Agregar al carrito'}
-        </Button>
-      </DialogActions>
-    </Dialog>
+    <Box component="ul" sx={{ m: 0, mt: 2, pl: 3, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+      {shown.map((n, i) => <li key={`${n}-${i}`}><Typography component="span" sx={{ fontSize: FS.body, fontWeight: 600 }}>{n}</Typography></li>)}
+      {rest > 0 && <li><Typography component="span" sx={{ fontSize: FS.body, color: 'text.secondary' }}>+{rest} más</Typography></li>}
+    </Box>
   )
 }
 
 // ── Budget Item Card ─────────────────────────────────────────────────────────
-function BudgetItemCard({ item, lock, isLockedByMe, sessionId, purchaseId, userId, workspaceId, alreadyBought, onAddItem, selectMode, selected, onToggleSelect }) {
+function BudgetItemCard({ item, lock, isLockedByMe, sessionId, userId, alreadyBought, onAddItem, selectMode, selected, onToggleSelect }) {
   const theme = useTheme()
+  const st = theme.palette.stock
   const { lockItem, unlockItem } = useShoppingStore()
   const { enqueueSnackbar } = useSnackbar()
   const isLocked = Boolean(lock)
@@ -306,105 +64,103 @@ function BudgetItemCard({ item, lock, isLockedByMe, sessionId, purchaseId, userI
 
   if (alreadyBought) return null
 
+  const lockTitle = isLockedByMe ? 'Liberar' : isLocked ? 'Reservado por otro' : 'Reservar para mí'
+  const addTitle = canInteract ? 'Agregar al carrito' : 'Reservado'
+
   return (
     <Card
       sx={{
-        mb: 1.5,
-        border: '1.5px solid',
-        borderColor: isLockedByMe
-          ? 'primary.main'
-          : isLocked
-          ? 'warning.main'
-          : 'divider',
-        transition: 'all 0.2s ease',
+        mb: 2,
+        borderWidth: 1,
+        borderColor: isLockedByMe ? 'primary.main' : isLocked ? st.riesgo.line : 'divider',
+        transition: 'border-color 140ms',
         cursor: selectMode && canInteract ? 'pointer' : 'default',
-        opacity: selectMode && !canInteract ? 0.5 : 1,
-        '&:hover': { boxShadow: 4 },
+        bgcolor: selectMode && !canInteract ? 'action.hover' : 'background.paper',
       }}
       onClick={selectMode && canInteract ? onToggleSelect : undefined}
     >
-      <CardContent sx={{ py: '14px !important', px: 2 }}>
-        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
-          {/* Category dot / selection indicator */}
-          {selectMode ? (
-            <IconButton size="small" disabled={!canInteract} tabIndex={-1} disableRipple sx={{ mt: -0.5, p: 0.5 }}>
-              {selected
-                ? <CheckCircle color="primary" sx={{ fontSize: 20 }} />
-                : <RadioButtonUnchecked color="disabled" sx={{ fontSize: 20 }} />}
-            </IconButton>
-          ) : (
-            <Box
-              sx={{
-                width: 10, height: 10, borderRadius: '50%', flexShrink: 0, mt: 0.8,
-                bgcolor: item.categories?.color || (theme.palette.mode === 'dark' ? '#475569' : '#cbd5e1'),
-              }}
-            />
-          )}
+      <Box sx={{ p: 2, display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
+        {selectMode ? (
+          <Checkbox
+            className="select-in"
+            checked={selected}
+            disabled={!canInteract}
+            sx={{ ml: -1, mt: -1 }}
+            onClick={(e) => { e.stopPropagation(); onToggleSelect() }}
+            inputProps={{ 'aria-label': `Seleccionar ${item.product_name}` }}
+          />
+        ) : (
+          <Box sx={{ width: 12, height: 12, borderRadius: '50%', flexShrink: 0, mt: 0.75, bgcolor: item.categories?.color || theme.palette.text.disabled }} />
+        )}
 
-          {/* Content */}
-          <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-            <Typography variant="subtitle2" fontWeight={700} noWrap>{item.product_name}</Typography>
-            <Stack direction="row" spacing={0.75} flexWrap="wrap" sx={{ mt: 0.5 }}>
-              <Chip size="small" label={`${item.quantity} ${item.unit}`} variant="outlined" sx={{ height: 20, fontSize: 11 }} />
-              {item.estimated_price && (
-                <Chip size="small" label={`~S/${item.estimated_price}`} color="info" sx={{ height: 20, fontSize: 11 }} />
-              )}
-              {item.categories && (
-                <Chip size="small" label={item.categories.name} sx={{ height: 20, fontSize: 11, bgcolor: alpha(item.categories.color, 0.15), color: item.categories.color, fontWeight: 600 }} />
-              )}
-            </Stack>
-
-            {/* Lock status */}
-            {isLocked && !isLockedByMe && lock && (
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.75 }}>
-                <Avatar src={lock.profiles?.avatar_url} sx={{ width: 18, height: 18, fontSize: 10 }}>
-                  {lock.profiles?.full_name?.[0]}
-                </Avatar>
-                <Typography variant="caption" color="warning.main" fontWeight={600}>
-                  {lock.profiles?.full_name} lo está comprando
-                </Typography>
+        <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+          <Typography sx={{ fontSize: FS.body, fontWeight: 700 }} noWrap>{item.product_name}</Typography>
+          <Box sx={{ display: 'flex', columnGap: 1, rowGap: 0.5, flexWrap: 'wrap', mt: 0.5, alignItems: 'center' }}>
+            <Box sx={{ ...NUM, px: 1, py: 0.5, borderRadius: '8px', border: 1, borderColor: 'divider', fontSize: FS.meta, fontWeight: 600, lineHeight: 1.4 }}>
+              {item.quantity} {item.unit}
+            </Box>
+            {item.estimated_price && (
+              <Box sx={{ ...NUM, px: 1, py: 0.5, borderRadius: '8px', border: 1, borderColor: 'divider', fontSize: FS.meta, fontWeight: 600, lineHeight: 1.4 }}>
+                ~{fmtMoney(item.estimated_price)}
               </Box>
             )}
-            {isLockedByMe && (
-              <Typography variant="caption" color="primary.main" fontWeight={600}>
-                Lo estás comprando tú
-              </Typography>
+            {item.categories && (
+              <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 1, px: 1, py: 0.5, borderRadius: '8px', bgcolor: 'action.hover' }}>
+                <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: item.categories.color }} />
+                <Typography component="span" sx={{ fontSize: FS.meta, fontWeight: 600, lineHeight: 1.4 }}>{item.categories.name}</Typography>
+              </Box>
             )}
           </Box>
 
-          {/* Actions */}
-          {!selectMode && (
-          <Stack direction="row" spacing={0.5} sx={{ flexShrink: 0 }}>
-            <Tooltip title={isLockedByMe ? 'Liberar' : isLocked ? 'Reservado por otro' : 'Reservar para mí'}>
+          {/* Lock status: icono + texto + tono (nunca solo color) */}
+          {isLocked && !isLockedByMe && lock && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1, color: st.riesgo.text }}>
+              <Lock sx={{ fontSize: 16, color: st.riesgo.icon }} />
+              <Avatar src={lock.profiles?.avatar_url} sx={{ width: 20, height: 20, fontSize: FS.meta }}>
+                {lock.profiles?.full_name?.[0]}
+              </Avatar>
+              <Typography sx={{ fontSize: FS.meta, fontWeight: 700, color: 'inherit' }}>
+                {lock.profiles?.full_name} lo está comprando
+              </Typography>
+            </Box>
+          )}
+          {isLockedByMe && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1, color: 'primary.main' }}>
+              <Lock sx={{ fontSize: 16 }} />
+              <Typography sx={{ fontSize: FS.meta, fontWeight: 700, color: 'inherit' }}>Lo estás comprando tú</Typography>
+            </Box>
+          )}
+        </Box>
+
+        {!selectMode && (
+          <Box sx={{ display: 'flex', gap: 1, flexShrink: 0 }}>
+            <Tooltip title={lockTitle}>
               <span>
                 <IconButton
-                  size="small"
+                  aria-label={lockTitle}
                   onClick={handleLock}
                   disabled={isLocked && !isLockedByMe}
-                  color={isLockedByMe ? 'primary' : 'default'}
-                  sx={{ bgcolor: isLockedByMe ? alpha(theme.palette.primary.main, 0.1) : 'transparent' }}
+                  sx={{ border: 1, borderColor: isLockedByMe ? 'primary.main' : 'divider', color: isLockedByMe ? 'primary.main' : 'text.secondary', bgcolor: isLockedByMe ? 'action.selected' : 'transparent' }}
                 >
                   {isLockedByMe ? <Lock fontSize="small" /> : <LockOpen fontSize="small" />}
                 </IconButton>
               </span>
             </Tooltip>
-            <Tooltip title={canInteract ? 'Agregar al carrito' : 'Reservado'}>
+            <Tooltip title={addTitle}>
               <span>
                 <IconButton
-                  size="small"
-                  color="success"
+                  aria-label={addTitle}
                   onClick={() => onAddItem(item)}
                   disabled={!canInteract}
-                  sx={{ bgcolor: canInteract ? alpha(theme.palette.success.main, 0.1) : 'transparent' }}
+                  sx={{ bgcolor: canInteract ? 'primary.main' : 'transparent', color: canInteract ? 'primary.contrastText' : 'text.disabled', '&:hover': { bgcolor: 'primary.dark' } }}
                 >
                   <Add fontSize="small" />
                 </IconButton>
               </span>
             </Tooltip>
-          </Stack>
-          )}
-        </Box>
-      </CardContent>
+          </Box>
+        )}
+      </Box>
     </Card>
   )
 }
@@ -413,59 +169,51 @@ function BudgetItemCard({ item, lock, isLockedByMe, sessionId, purchaseId, userI
 function PurchasedItemRow({ item, onRemove, onEdit, selectMode, selected, onToggleSelect }) {
   return (
     <Box
-      sx={{ px: 2, py: 1, display: 'flex', alignItems: 'center', gap: 1.5, cursor: selectMode ? 'pointer' : 'default' }}
+      sx={{ px: 2, py: 1, minHeight: 64, display: 'flex', alignItems: 'center', gap: 2, cursor: selectMode ? 'pointer' : 'default' }}
       onClick={selectMode ? onToggleSelect : undefined}
     >
       {selectMode ? (
-        <IconButton size="small" sx={{ p: 0.5, flexShrink: 0 }} tabIndex={-1} disableRipple>
-          {selected
-            ? <CheckCircle color="primary" sx={{ fontSize: 20 }} />
-            : <RadioButtonUnchecked color="disabled" sx={{ fontSize: 20 }} />}
-        </IconButton>
+        <Checkbox
+          className="select-in"
+          checked={selected}
+          sx={{ ml: -1 }}
+          onClick={(e) => { e.stopPropagation(); onToggleSelect() }}
+          inputProps={{ 'aria-label': `Seleccionar ${item.product_name}` }}
+        />
       ) : (
-        <CheckCircle color="success" sx={{ fontSize: 20, flexShrink: 0 }} />
+        <CheckCircle sx={{ fontSize: 20, flexShrink: 0, color: 'primary.main' }} />
       )}
       <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-        <Typography variant="body2" fontWeight={600} noWrap>
+        <Typography sx={{ fontSize: FS.body, fontWeight: 700 }}>
           {item.product_name}
           {item.brand && <Box component="span" sx={{ color: 'text.secondary', fontWeight: 400 }}> · {item.brand}</Box>}
         </Typography>
-        <Stack direction="row" spacing={0.75} alignItems="center" flexWrap="wrap">
-          <Typography variant="caption" color="text.secondary">
-            {item.quantity} {item.unit}
-          </Typography>
-          {item.profiles && (
-            <Typography variant="caption" color="text.secondary">
-              · {item.profiles.full_name}
-            </Typography>
-          )}
+        <Box sx={{ display: 'flex', columnGap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
+          <Typography sx={{ ...NUM, fontSize: FS.meta, color: 'text.secondary' }}>{item.quantity} {item.unit}</Typography>
+          {item.profiles && <Typography sx={{ fontSize: FS.meta, color: 'text.secondary' }}>· {item.profiles.full_name}</Typography>}
           {item.is_household === false && (
-            <Chip
-              size="small" label="No hogar"
-              sx={{ height: 16, fontSize: '0.6rem', bgcolor: 'action.hover', color: 'text.secondary' }}
-            />
+            <Box sx={{ px: 1, borderRadius: '8px', bgcolor: 'action.hover' }}>
+              <Typography component="span" sx={{ fontSize: FS.meta, fontWeight: 600, color: 'text.secondary', lineHeight: 1.5 }}>No hogar</Typography>
+            </Box>
           )}
-        </Stack>
+        </Box>
       </Box>
-      {item.total_price != null && (
-        <Typography variant="subtitle2" fontWeight={700} color="success.main" sx={{ flexShrink: 0 }}>
-          S/{item.total_price.toFixed(2)}
-        </Typography>
-      )}
-      {!selectMode && (
-      <Box sx={{ display: 'flex', flexShrink: 0, gap: 0.25 }}>
-        <Tooltip title="Editar">
-          <IconButton size="small" onClick={() => onEdit(item)} sx={{ opacity: 0.5, '&:hover': { opacity: 1 } }}>
-            <Edit fontSize="small" />
-          </IconButton>
-        </Tooltip>
-        <Tooltip title="Eliminar">
-          <IconButton size="small" onClick={() => onRemove(item)} sx={{ opacity: 0.5, '&:hover': { opacity: 1, color: 'error.main' } }}>
-            <Delete fontSize="small" />
-          </IconButton>
-        </Tooltip>
+      {/* Importe y acciones: en móvil se apilan para que el nombre no se corte */}
+      <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, alignItems: { xs: 'flex-end', sm: 'center' }, gap: { xs: 0.5, sm: 2 }, flexShrink: 0 }}>
+        {item.total_price != null && (
+          <Typography sx={{ ...NUM, fontSize: FS.body, fontWeight: 700 }}>{fmtMoney(item.total_price)}</Typography>
+        )}
+        {!selectMode && (
+          <Box sx={{ display: 'flex', gap: 0.5 }}>
+            <Tooltip title="Editar">
+              <IconButton aria-label={`Editar ${item.product_name}`} onClick={() => onEdit(item)}><Edit fontSize="small" /></IconButton>
+            </Tooltip>
+            <Tooltip title="Eliminar">
+              <IconButton aria-label={`Eliminar ${item.product_name}`} onClick={() => onRemove(item)}><Delete fontSize="small" /></IconButton>
+            </Tooltip>
+          </Box>
+        )}
       </Box>
-      )}
     </Box>
   )
 }
@@ -477,13 +225,15 @@ export default function ShoppingModePage() {
   const budgetId = searchParams.get('budgetId')
   const navigate = useNavigate()
   const theme = useTheme()
+  const st = theme.palette.stock
 
   const { user } = useAuthStore()
   const { currentWorkspace } = useWorkspaceStore()
+  const { sidebarOpen } = useAppStore()
   const { currentBudget, budgetItems, fetchBudgetWithItems, updateBudget } = useBudgetStore()
   const { products, categories, fetchProducts, fetchCategories } = useInventoryStore()
   const {
-    session, participants, locks, purchaseItems,
+    session, participants, purchaseItems,
     loading, startSession, fetchSession, completeSession,
     getTotals, getLockForItem, removePurchaseItem, removePurchaseItemsBulk, unsubscribe,
     updatePurchaseItem, addPurchaseItem, unlockItem,
@@ -496,10 +246,13 @@ export default function ShoppingModePage() {
   const [editItemDialog, setEditItemDialog] = useState({ open: false, item: null })
   const [completing, setCompleting] = useState(false)
   const [initialized, setInitialized] = useState(false)
+  const [initError, setInitError] = useState(null)
+  const [retryTick, setRetryTick] = useState(0)
   const [showBought, setShowBought] = useState(false)
   const [exitConfirm, setExitConfirm] = useState(false)
   const [completeDialog, setCompleteDialog] = useState(false)
   const [deleteItemConfirm, setDeleteItemConfirm] = useState(null)
+  const [deletingItem, setDeletingItem] = useState(false)
   const [boughtSelectMode, setBoughtSelectMode] = useState(false)
   const [boughtSelectedIds, setBoughtSelectedIds] = useState(new Set())
   const [boughtBulkDeleteConfirm, setBoughtBulkDeleteConfirm] = useState(false)
@@ -539,53 +292,60 @@ export default function ShoppingModePage() {
     }
 
     const init = async () => {
-      if (sessionId) {
-        await fetchSession(sessionId, user.id)
-        const { data: purch } = await supabase
-          .from('purchases')
-          .select('id, name, total_amount')
-          .eq('session_id', sessionId)
-          .maybeSingle()
-        if (purch) setPurchase(purch)
-        setInitialized(true)
-      } else if (budgetId && currentWorkspace && user) {
-        await fetchBudgetWithItems(budgetId)
-
-        // Resume the budget's active session instead of starting a new one —
-        // otherwise every "Iniciar compra" click orphans the previous session's
-        // progress (items stay in the DB but become unreachable from the UI).
-        const { data: existingSessions, error: existingSessionsError } = await supabase
-          .from('shopping_sessions')
-          .select('id')
-          .eq('budget_id', budgetId)
-          .eq('status', 'active')
-          .order('started_at', { ascending: false })
-          .limit(1)
-
-        if (existingSessionsError) console.error('Lookup of active session failed', existingSessionsError)
-
-        if (existingSessions?.[0]) {
-          navigate(`/shopping/${existingSessions[0].id}`, { replace: true })
-          return
-        }
-
-        const { data: sess } = await startSession(budgetId, currentWorkspace.id, user.id)
-        if (sess) {
-          const purch = await resolveSessionPurchase(sess.id, currentWorkspace.id, budgetId)
+      try {
+        if (sessionId) {
+          const { error: sessionError } = await fetchSession(sessionId, user.id)
+          if (sessionError) setInitError({ message: sessionError.message || 'Sin detalle del servidor' })
+          const { data: purch } = await supabase
+            .from('purchases')
+            .select('id, name, total_amount')
+            .eq('session_id', sessionId)
+            .maybeSingle()
           if (purch) setPurchase(purch)
-          navigate(`/shopping/${sess.id}`, { replace: true })
+          setInitialized(true)
+        } else if (budgetId && currentWorkspace && user) {
+          await fetchBudgetWithItems(budgetId)
+
+          // Resume the budget's active session instead of starting a new one —
+          // otherwise every "Iniciar compra" click orphans the previous session's
+          // progress (items stay in the DB but become unreachable from the UI).
+          const { data: existingSessions, error: existingSessionsError } = await supabase
+            .from('shopping_sessions')
+            .select('id')
+            .eq('budget_id', budgetId)
+            .eq('status', 'active')
+            .order('started_at', { ascending: false })
+            .limit(1)
+
+          if (existingSessionsError) console.error('Lookup of active session failed', existingSessionsError)
+
+          if (existingSessions?.[0]) {
+            navigate(`/shopping/${existingSessions[0].id}`, { replace: true })
+            return
+          }
+
+          const { data: sess, error: startError } = await startSession(budgetId, currentWorkspace.id, user.id)
+          if (startError) setInitError({ message: startError.message || 'Sin detalle del servidor' })
+          if (sess) {
+            const purch = await resolveSessionPurchase(sess.id, currentWorkspace.id, budgetId)
+            if (purch) setPurchase(purch)
+            navigate(`/shopping/${sess.id}`, { replace: true })
+          }
+          setInitialized(true)
         }
+      } catch (e) {
+        setInitError({ message: e?.message || 'Sin detalle del servidor' })
         setInitialized(true)
       }
     }
 
-    const key = `${sessionId || ''}|${budgetId || ''}|${user?.id || ''}`
+    const key = `${sessionId || ''}|${budgetId || ''}|${user?.id || ''}|${retryTick}`
     if (user && initKeyRef.current !== key) {
       initKeyRef.current = key
       init()
     }
     return () => unsubscribe()
-  }, [sessionId, budgetId, user?.id])
+  }, [sessionId, budgetId, user?.id, retryTick])
 
   useEffect(() => {
     if (session?.budget_id && !currentBudget) fetchBudgetWithItems(session.budget_id)
@@ -631,6 +391,15 @@ export default function ShoppingModePage() {
       enqueueSnackbar(`${boughtSelectedIds.size} producto${boughtSelectedIds.size !== 1 ? 's' : ''} eliminado${boughtSelectedIds.size !== 1 ? 's' : ''} de la compra`, { variant: 'success' })
       exitBoughtSelectMode()
     }
+  }
+
+  const handleDeleteBought = async () => {
+    setDeletingItem(true)
+    const { error } = await removePurchaseItem(deleteItemConfirm.id)
+    setDeletingItem(false)
+    if (error) enqueueSnackbar('Error al eliminar', { variant: 'error' })
+    else enqueueSnackbar('Producto eliminado', { variant: 'success' })
+    setDeleteItemConfirm(null)
   }
 
   const exitPendingSelectMode = () => {
@@ -705,65 +474,73 @@ export default function ShoppingModePage() {
     }
   }
 
-  if (!initialized || loading) {
+  const retryInit = () => { setInitError(null); setInitialized(false); setRetryTick((t) => t + 1) }
+  const missingIds = !sessionId && !budgetId
+
+  // ── Error de inicio: causa concreta + Reintentar ──
+  if (missingIds || initError) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', flexDirection: 'column', gap: 2 }}>
-        <Box sx={{ width: 56, height: 56, borderRadius: '16px', background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <ShoppingCart sx={{ color: '#fff', fontSize: 28 }} />
-        </Box>
-        <CircularProgress color="primary" size={28} />
-        <Typography color="text.secondary" variant="body2">Iniciando modo compra…</Typography>
+      <Box sx={{ maxWidth: 720, mx: 'auto', display: 'flex', flexDirection: 'column', gap: 3 }}>
+        <Box><Button startIcon={<ArrowBack />} onClick={() => navigate('/budgets')} sx={{ color: 'text.secondary' }}>Presupuestos</Button></Box>
+        <LoadErrorBanner
+          message={missingIds ? 'No se encontró la sesión de compra.' : initError.message}
+          onRetry={missingIds ? () => navigate('/budgets') : retryInit}
+        />
       </Box>
     )
   }
 
+  // ── Cargando: skeleton con la forma de la pantalla ──
+  if (!initialized || loading) {
+    return (
+      <Box sx={{ maxWidth: 720, mx: 'auto', display: 'flex', flexDirection: 'column', gap: 3 }} aria-busy="true">
+        <Typography sx={{ fontSize: FS.body, color: 'text.secondary' }}>Iniciando modo compra…</Typography>
+        <Skeleton variant="rectangular" height={132} sx={{ borderRadius: '12px' }} />
+        {[1, 2, 3].map((i) => <Skeleton key={i} variant="rectangular" height={96} sx={{ borderRadius: '12px' }} />)}
+      </Box>
+    )
+  }
+
+  // Hero: con objetivo, lo que aún se puede gastar; sin objetivo, lo gastado
+  const hasBudget = budget > 0
+  const heroLabel = hasBudget ? (overBudget ? 'Excedido' : 'Disponible') : 'Gastado'
+  const heroValue = hasBudget ? (overBudget ? -Math.abs(diff) : diff) : totalSpent
+  const heroSkin = overBudget ? st.agotado : st.saludable
+  const HeroIcon = overBudget ? ErrorOutlined : Receipt
+  const progressColor = overBudget ? st.agotado.icon : progress > 80 ? st.riesgo.icon : theme.palette.primary.main
+  const boughtNames = purchaseItems.filter((i) => boughtSelectedIds.has(i.id)).map((i) => i.product_name)
+  const barLeft = { xs: 0, md: sidebarOpen ? DRAWER_WIDTH : 0 }
+
   return (
-    <Box sx={{ pb: 14, maxWidth: 600, mx: 'auto' }}>
+    <Box sx={{ pb: { xs: 24, md: 16 }, maxWidth: 720, mx: 'auto' }}>
 
       {/* ── Sticky header ── */}
       <Box
         sx={{
-          position: 'sticky', top: 0, zIndex: 20,
+          position: 'sticky', top: APPBAR_HEIGHT, zIndex: 20,
           bgcolor: 'background.default',
-          borderBottom: '1px solid', borderColor: 'divider',
-          borderTop: '3px solid',
-          borderTopColor: 'success.main',
-          pb: 1.5, pt: 1, px: 0,
-          backdropFilter: 'blur(12px)',
+          borderBottom: 1, borderColor: 'divider',
+          pb: 2, pt: 1, mb: 3,
         }}
       >
-        {/* Shopping mode badge */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1, px: 0.5 }}>
-          <Box sx={{
-            width: 7, height: 7, borderRadius: '50%', bgcolor: 'success.main', flexShrink: 0,
-            animation: 'shopPulse 1.6s ease-in-out infinite',
-            '@keyframes shopPulse': { '0%,100%': { opacity: 1, transform: 'scale(1)' }, '50%': { opacity: 0.45, transform: 'scale(0.75)' } },
-          }} />
-          <Typography variant="overline" color="success.main" fontWeight={700} sx={{ fontSize: '0.65rem', letterSpacing: '0.1em', lineHeight: 1 }}>
-            Modo compra activo
-          </Typography>
-        </Box>
-
-        {/* Title row */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
-          <IconButton size="small" onClick={() => setExitConfirm(true)} sx={{ mr: 0.5 }}>
+        {/* Estado + participantes */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+          <IconButton aria-label="Salir del modo compra" onClick={() => setExitConfirm(true)} sx={{ ml: -1 }}>
             <ArrowBack fontSize="small" />
           </IconButton>
-          <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-            <Typography variant="subtitle1" fontWeight={700} noWrap>{currentBudget?.name ?? 'Modo Compra'}</Typography>
-            {currentBudget?.store && (
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                <Store sx={{ fontSize: 12, color: 'text.disabled' }} />
-                <Typography variant="caption" color="text.secondary">{currentBudget.store}</Typography>
-              </Box>
-            )}
+          <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 1, px: 1.5, py: 0.5, borderRadius: '8px', bgcolor: 'action.selected', color: 'primary.main' }}>
+            <Box sx={{
+              width: 8, height: 8, borderRadius: '50%', bgcolor: 'primary.main', flexShrink: 0,
+              animation: 'shopPulse 1.6s ease-in-out infinite',
+              '@keyframes shopPulse': { '0%,100%': { opacity: 1, transform: 'scale(1)' }, '50%': { opacity: 0.45, transform: 'scale(0.75)' } },
+            }} />
+            <Typography component="span" sx={{ fontSize: FS.meta, fontWeight: 700, color: 'inherit', lineHeight: 1.4 }}>Modo compra activo</Typography>
           </Box>
-
-          {/* Participants */}
-          <AvatarGroup max={4} sx={{ '& .MuiAvatar-root': { width: 28, height: 28, fontSize: 11, border: `2px solid ${theme.palette.background.default}` } }}>
+          <Box sx={{ flexGrow: 1 }} />
+          <AvatarGroup max={4} sx={{ '& .MuiAvatar-root': { width: 32, height: 32, fontSize: FS.meta, border: `2px solid ${theme.palette.background.default}` } }}>
             {participants.map((p) => (
               <Tooltip key={p.id} title={p.profiles?.full_name ?? ''}>
-                <Avatar src={p.profiles?.avatar_url} sx={{ bgcolor: 'primary.main' }}>
+                <Avatar src={p.profiles?.avatar_url} alt={p.profiles?.full_name ?? ''} sx={{ bgcolor: 'primary.main', color: 'primary.contrastText' }}>
                   {p.profiles?.full_name?.[0]?.toUpperCase()}
                 </Avatar>
               </Tooltip>
@@ -771,85 +548,100 @@ export default function ShoppingModePage() {
           </AvatarGroup>
         </Box>
 
-        {/* Totals */}
-        <Box sx={{ display: 'flex', gap: 1.5, mb: 1 }}>
-          <Box sx={{ flex: 1, textAlign: 'center', p: 1, borderRadius: 2, bgcolor: 'action.hover' }}>
-            <Typography variant="h6" fontWeight={800} color="primary.main">S/{totalSpent.toFixed(2)}</Typography>
-            <Typography variant="caption" color="text.secondary">Gastado</Typography>
-          </Box>
-          {budget > 0 && (
-            <Box sx={{ flex: 1, textAlign: 'center', p: 1, borderRadius: 2, bgcolor: overBudget ? alpha(theme.palette.error.main, 0.1) : 'action.hover' }}>
-              <Typography variant="h6" fontWeight={800} color={overBudget ? 'error.main' : 'success.main'}>
-                {overBudget ? `-S/${Math.abs(diff).toFixed(2)}` : `S/${diff.toFixed(2)}`}
-              </Typography>
-              <Typography variant="caption" color="text.secondary">{overBudget ? 'Excedido' : 'Disponible'}</Typography>
+        {/* Título */}
+        <Box sx={{ mb: 2 }}>
+          <Typography component="h1" sx={{ fontSize: FS.title, fontWeight: 800, lineHeight: 1.3, letterSpacing: '-0.01em' }} noWrap>{currentBudget?.name ?? 'Modo Compra'}</Typography>
+          {currentBudget?.store && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <Store sx={{ fontSize: 16, color: 'text.secondary' }} />
+              <Typography sx={{ fontSize: FS.meta, color: 'text.secondary' }}>{currentBudget.store}</Typography>
             </Box>
           )}
-          <Box sx={{ flex: 1, textAlign: 'center', p: 1, borderRadius: 2, bgcolor: 'action.hover' }}>
-            <Typography variant="h6" fontWeight={800}>{purchaseItems.length}</Typography>
-            <Typography variant="caption" color="text.secondary">Items</Typography>
+        </Box>
+
+        {/* Hero + KPIs */}
+        <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: 'minmax(0, 3fr) minmax(0, 2fr)' }}>
+          <Card sx={{ bgcolor: heroSkin.tint, borderColor: heroSkin.line, p: 2, display: 'flex', flexDirection: 'column', gap: 0.5, justifyContent: 'center' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <HeroIcon sx={{ fontSize: 20, color: heroSkin.icon }} />
+              <Typography component="h2" sx={{ fontSize: FS.body, fontWeight: 700 }}>{heroLabel}</Typography>
+            </Box>
+            <Typography sx={{ ...NUM, fontSize: { xs: FS.heroXs, md: FS.hero }, fontWeight: 800, lineHeight: 1.1, letterSpacing: '-0.02em', color: heroSkin.text }}>
+              {fmtMoney(heroValue)}
+            </Typography>
+          </Card>
+          <Box sx={{ display: 'grid', gap: 1.5, gridTemplateRows: hasBudget ? '1fr 1fr' : '1fr' }}>
+            {hasBudget && (
+              <Card sx={{ px: 2, py: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                <Typography sx={{ fontSize: FS.meta, color: 'text.secondary' }}>Gastado</Typography>
+                <Typography sx={{ ...NUM, fontSize: FS.title, fontWeight: 700, lineHeight: 1.3 }}>{fmtMoney(totalSpent)}</Typography>
+              </Card>
+            )}
+            <Card sx={{ px: 2, py: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+              <Typography sx={{ fontSize: FS.meta, color: 'text.secondary' }}>Items</Typography>
+              <Typography sx={{ ...NUM, fontSize: FS.title, fontWeight: 700, lineHeight: 1.3 }}>{purchaseItems.length}</Typography>
+            </Card>
           </Box>
         </Box>
 
         {/* Progress bar */}
-        {budget > 0 && (
+        {hasBudget && (
           <LinearProgress
+            aria-hidden
             variant="determinate"
             value={progress}
-            color={overBudget ? 'error' : progress > 80 ? 'warning' : 'primary'}
-            sx={{ height: 6, borderRadius: 3 }}
+            sx={{ height: 8, mt: 2, bgcolor: 'action.hover', '& .MuiLinearProgress-bar': { bgcolor: progressColor } }}
           />
         )}
       </Box>
 
       {/* ── Purchased items section ── */}
       {purchaseItems.length > 0 && (
-        <Box sx={{ mt: 2 }}>
+        <Box sx={{ mb: 3 }}>
           <Button
             fullWidth
             variant="text"
+            aria-expanded={showBought}
             startIcon={showBought ? <ExpandLess /> : <ExpandMore />}
-            endIcon={<Chip size="small" label={purchaseItems.length} color="success" sx={{ height: 20 }} />}
+            endIcon={(
+              <Box sx={{ ...NUM, px: 1, minWidth: 28, borderRadius: '8px', bgcolor: 'action.selected', color: 'primary.main', fontSize: FS.meta, fontWeight: 700, lineHeight: 1.7 }}>
+                {purchaseItems.length}
+              </Box>
+            )}
             onClick={() => setShowBought(!showBought)}
-            sx={{ justifyContent: 'space-between', px: 0.5, mb: 0.5, color: 'text.secondary' }}
+            sx={{ justifyContent: 'space-between', px: 1, mb: 1, color: 'text.primary' }}
           >
-            <Typography variant="body2" fontWeight={600} sx={{ flexGrow: 1, textAlign: 'left' }}>
+            <Typography component="span" sx={{ fontSize: FS.body, fontWeight: 700, flexGrow: 1, textAlign: 'left' }}>
               Agregados al carrito
             </Typography>
           </Button>
 
-          <Collapse in={showBought}>
-            <Card sx={{ mb: 2 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 1.5, py: 0.75 }}>
+          {showBought && (
+            <Card className="select-in">
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, px: 2, py: 1, flexWrap: 'wrap' }}>
                 {boughtSelectMode ? (
                   <>
-                    <Typography variant="caption" color="text.secondary">
+                    <Typography sx={{ ...NUM, fontSize: FS.body, color: 'text.secondary' }}>
                       {boughtSelectedIds.size} seleccionado{boughtSelectedIds.size !== 1 ? 's' : ''}
                     </Typography>
-                    <Stack direction="row" spacing={0.5} alignItems="center">
-                      <Button size="small" onClick={() => setBoughtSelectedIds(new Set(purchaseItems.map((i) => i.id)))}>Todos</Button>
-                      <Button size="small" onClick={() => setBoughtSelectedIds(new Set())}>Ninguno</Button>
-                      <Button
-                        size="small" variant="contained" color="error"
-                        disabled={boughtSelectedIds.size === 0}
-                        onClick={() => setBoughtBulkDeleteConfirm(true)}
-                      >
+                    <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
+                      <Button onClick={() => setBoughtSelectedIds(new Set(purchaseItems.map((i) => i.id)))}>Todos</Button>
+                      <Button onClick={() => setBoughtSelectedIds(new Set())}>Ninguno</Button>
+                      <Button variant="outlined" startIcon={<Delete sx={{ fontSize: 20 }} />} disabled={boughtSelectedIds.size === 0} onClick={() => setBoughtBulkDeleteConfirm(true)}>
                         Eliminar
                       </Button>
-                      <Button size="small" color="inherit" onClick={exitBoughtSelectMode}>Cancelar</Button>
-                    </Stack>
+                      <Button color="inherit" onClick={exitBoughtSelectMode} sx={{ color: 'text.secondary' }}>Cancelar</Button>
+                    </Box>
                   </>
                 ) : (
                   <>
                     <span />
-                    <Button size="small" onClick={() => { setBoughtSelectMode(true); setBoughtSelectedIds(new Set()) }}>
-                      Seleccionar varios
-                    </Button>
+                    <Button onClick={() => { setBoughtSelectMode(true); setBoughtSelectedIds(new Set()) }}>Seleccionar varios</Button>
                   </>
                 )}
               </Box>
               <Divider />
-              <List disablePadding>
+              <Box>
                 {purchaseItems.map((pi, i) => (
                   <Box key={pi.id}>
                     <PurchasedItemRow
@@ -860,52 +652,50 @@ export default function ShoppingModePage() {
                       selected={boughtSelectedIds.has(pi.id)}
                       onToggleSelect={() => toggleBoughtSelected(pi.id)}
                     />
-                    {i < purchaseItems.length - 1 && <Divider component="li" />}
+                    {i < purchaseItems.length - 1 && <Divider sx={{ mx: 2 }} />}
                   </Box>
                 ))}
-              </List>
+              </Box>
             </Card>
-          </Collapse>
+          )}
         </Box>
       )}
 
       {/* ── Pending budget items ── */}
       {pendingItems.length > 0 && (
-        <Box sx={{ mt: purchaseItems.length > 0 ? 0 : 2 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1, px: 0.5 }}>
+        <Box sx={{ mb: 3 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, mb: 2, flexWrap: 'wrap' }}>
             {pendingSelectMode ? (
               <>
-                <Typography variant="body2" fontWeight={600} color="text.secondary">
+                <Typography sx={{ ...NUM, fontSize: FS.body, fontWeight: 700, color: 'text.secondary' }}>
                   {pendingSelectedIds.size} seleccionado{pendingSelectedIds.size !== 1 ? 's' : ''}
                 </Typography>
-                <Stack direction="row" spacing={0.5} alignItems="center">
+                <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
                   <Button
-                    size="small"
                     onClick={() => setPendingSelectedIds(new Set(
                       pendingItems.filter((i) => { const l = getLockForItem(i.id); return !l || l.user_id === user?.id }).map((i) => i.id)
                     ))}
                   >
                     Todos
                   </Button>
-                  <Button size="small" onClick={() => setPendingSelectedIds(new Set())}>Ninguno</Button>
+                  <Button onClick={() => setPendingSelectedIds(new Set())}>Ninguno</Button>
                   <Button
-                    size="small" variant="contained" color="success"
+                    variant="outlined"
                     disabled={pendingSelectedIds.size === 0 || pendingBulkAdding}
                     onClick={handleAddSelectedPending}
+                    startIcon={pendingBulkAdding ? <CircularProgress size={16} color="inherit" /> : undefined}
                   >
                     {pendingBulkAdding ? 'Agregando…' : `Agregar (${pendingSelectedIds.size})`}
                   </Button>
-                  <Button size="small" color="inherit" onClick={exitPendingSelectMode}>Cancelar</Button>
-                </Stack>
+                  <Button color="inherit" onClick={exitPendingSelectMode} sx={{ color: 'text.secondary' }}>Cancelar</Button>
+                </Box>
               </>
             ) : (
               <>
-                <Typography variant="body2" fontWeight={600} color="text.secondary">
+                <Typography component="h2" sx={{ ...NUM, fontSize: FS.title, fontWeight: 700, lineHeight: 1.3 }}>
                   Pendientes ({pendingItems.length})
                 </Typography>
-                <Button size="small" onClick={() => { setPendingSelectMode(true); setPendingSelectedIds(new Set()) }}>
-                  Seleccionar varios
-                </Button>
+                <Button onClick={() => { setPendingSelectMode(true); setPendingSelectedIds(new Set()) }}>Seleccionar varios</Button>
               </>
             )}
           </Box>
@@ -918,9 +708,7 @@ export default function ShoppingModePage() {
                 lock={lock}
                 isLockedByMe={lock?.user_id === user?.id}
                 sessionId={session?.id}
-                purchaseId={purchase?.id}
                 userId={user?.id}
-                workspaceId={currentWorkspace?.id}
                 alreadyBought={purchasedIds.has(item.id)}
                 onAddItem={(i) => setAddItemDialog({ open: true, item: i })}
                 selectMode={pendingSelectMode}
@@ -934,122 +722,129 @@ export default function ShoppingModePage() {
 
       {/* ── Completed items from budget ── */}
       {boughtBudgetItems.length > 0 && (
-        <Box sx={{ mt: 2 }}>
-          <Typography variant="caption" color="text.disabled" sx={{ px: 0.5 }}>
-            Ya comprados del presupuesto
-          </Typography>
-          <Stack spacing={0.5} sx={{ mt: 0.5, opacity: 0.5 }}>
+        <Box sx={{ mb: 3 }}>
+          <Typography sx={{ fontSize: FS.meta, color: 'text.secondary', px: 1 }}>Ya comprados del presupuesto</Typography>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mt: 1 }}>
             {boughtBudgetItems.map((item) => (
               <Box key={item.id} sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1 }}>
-                <CheckCircle color="success" sx={{ fontSize: 16 }} />
-                <Typography variant="body2" sx={{ textDecoration: 'line-through' }} noWrap>{item.product_name}</Typography>
+                <CheckCircle sx={{ fontSize: 16, color: 'text.secondary' }} />
+                <Typography sx={{ fontSize: FS.body, color: 'text.secondary', textDecoration: 'line-through' }} noWrap>{item.product_name}</Typography>
               </Box>
             ))}
-          </Stack>
+          </Box>
         </Box>
       )}
 
       {/* Empty state */}
       {pendingItems.length === 0 && purchaseItems.length === 0 && (
-        <Box sx={{ textAlign: 'center', py: 8 }}>
-          <ShoppingCart sx={{ fontSize: 64, color: 'text.disabled', mb: 2 }} />
-          <Typography color="text.secondary">No hay items en el presupuesto.</Typography>
-          <Typography variant="body2" color="text.disabled">Usa el botón + para agregar productos.</Typography>
-        </Box>
+        <EmptyState
+          icon={<ShoppingCart sx={{ fontSize: 28 }} />}
+          title="No hay items en el presupuesto."
+          body="Usa el botón + para agregar productos."
+        />
       )}
 
-      {/* ── FAB – add free item ── */}
+      {/* ── FAB – add free item (secundario: la primaria es Finalizar compra) ── */}
       <Fab
-        color="primary"
+        aria-label="Agregar producto"
         size="medium"
-        sx={{ position: 'fixed', bottom: { xs: 144, md: 88 }, right: 20, boxShadow: '0 4px 20px rgba(37,99,235,0.45)' }}
         onClick={() => setAddItemDialog({ open: true, item: null })}
+        sx={{
+          position: 'fixed', bottom: { xs: 168, md: 104 }, right: 20, zIndex: 16,
+          bgcolor: 'background.paper', color: 'primary.main', border: 1, borderColor: 'primary.main',
+          boxShadow: `0 8px 24px ${alpha(theme.palette.common.black, 0.18)}`,
+          '&:hover': { bgcolor: 'action.selected' },
+        }}
       >
         <Add />
       </Fab>
 
-      {/* ── Bottom bar – complete ── */}
+      {/* ── Bottom bar – complete (única acción primaria) ── */}
       <Box
         sx={{
-          position: 'fixed', bottom: { xs: 56, md: 0 }, left: 0, right: 0,
-          p: 2, pt: 1.5,
-          bgcolor: 'background.default',
-          borderTop: '1px solid', borderColor: 'divider',
-          backdropFilter: 'blur(12px)',
+          position: 'fixed', bottom: { xs: 64, md: 0 }, left: barLeft, right: 0,
+          p: 2,
+          bgcolor: 'background.paper',
+          borderTop: 1, borderColor: 'divider',
           zIndex: 15,
         }}
       >
-        <Button
-          fullWidth variant="contained" color="success" size="large"
-          startIcon={<Done />}
-          onClick={() => setCompleteDialog(true)}
-          disabled={completing || purchaseItems.length === 0}
-          sx={{ py: 1.5, fontSize: '0.95rem' }}
-        >
-          {completing ? 'Finalizando…' : `Finalizar compra · S/${totalSpent.toFixed(2)}`}
-        </Button>
+        <Box sx={{ maxWidth: 720, mx: 'auto' }}>
+          <Button
+            fullWidth variant="contained" size="large"
+            startIcon={completing ? <CircularProgress size={16} color="inherit" /> : <Done />}
+            onClick={() => setCompleteDialog(true)}
+            disabled={completing || purchaseItems.length === 0}
+            sx={{ minHeight: 52 }}
+          >
+            {completing ? 'Finalizando…' : `Finalizar compra · ${fmtMoney(totalSpent)}`}
+          </Button>
+        </Box>
       </Box>
 
       {/* ── Exit confirmation dialog ── */}
       <Dialog open={exitConfirm} onClose={() => setExitConfirm(false)} maxWidth="xs" fullWidth>
         <DialogTitle>¿Salir del modo compra?</DialogTitle>
         <DialogContent>
-          <Typography variant="body2" color="text.secondary">
+          <Typography sx={{ fontSize: FS.body, color: 'text.secondary' }}>
             La sesión quedará activa y podrás retomarla desde el presupuesto. Los productos que ya agregaste no se perderán.
           </Typography>
         </DialogContent>
         <DialogActions>
+          <Button onClick={() => navigate('/budgets')} color="inherit" sx={{ color: 'text.secondary' }}>Salir</Button>
           <Button onClick={() => setExitConfirm(false)} variant="contained">Seguir comprando</Button>
-          <Button onClick={() => navigate('/budgets')} color="inherit">Salir</Button>
         </DialogActions>
       </Dialog>
 
-      <Dialog open={Boolean(deleteItemConfirm)} onClose={() => setDeleteItemConfirm(null)} maxWidth="xs" fullWidth>
-        <DialogTitle sx={{ pb: 1 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Delete sx={{ color: 'error.main' }} />
+      <Dialog open={Boolean(deleteItemConfirm)} onClose={deletingItem ? undefined : () => setDeleteItemConfirm(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Box sx={{ p: 1, bgcolor: 'error.main', borderRadius: '8px', color: 'error.contrastText', display: 'flex' }}>
+              <Delete sx={{ fontSize: 24 }} />
+            </Box>
             Eliminar producto comprado
           </Box>
         </DialogTitle>
-        <DialogContent sx={{ pt: 1 }}>
-          <Typography>
+        <DialogContent>
+          <Typography sx={{ fontSize: FS.body }}>
             ¿Eliminar <strong>"{deleteItemConfirm?.product_name}"</strong> de esta compra?{' '}
             {deleteItemConfirm?.total_price != null && (
-              <>Se descontarán <strong>S/{deleteItemConfirm.total_price.toFixed(2)}</strong> del total.</>
+              <>Se descontarán <strong style={NUM}>{fmtMoney(deleteItemConfirm.total_price)}</strong> del total.</>
             )}
           </Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setDeleteItemConfirm(null)}>Cancelar</Button>
+          <Button onClick={() => setDeleteItemConfirm(null)} disabled={deletingItem}>Cancelar</Button>
           <Button
             variant="contained"
             color="error"
-            startIcon={<Delete />}
-            onClick={async () => {
-              await removePurchaseItem(deleteItemConfirm.id)
-              setDeleteItemConfirm(null)
-            }}
+            startIcon={deletingItem ? <CircularProgress size={16} color="inherit" /> : <Delete />}
+            disabled={deletingItem}
+            onClick={handleDeleteBought}
           >
             Eliminar
           </Button>
         </DialogActions>
       </Dialog>
 
-      <Dialog open={boughtBulkDeleteConfirm} onClose={() => setBoughtBulkDeleteConfirm(false)} maxWidth="xs" fullWidth>
-        <DialogTitle sx={{ pb: 1 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Delete sx={{ color: 'error.main' }} />
+      <Dialog open={boughtBulkDeleteConfirm} onClose={boughtBulkDeleting ? undefined : () => setBoughtBulkDeleteConfirm(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Box sx={{ p: 1, bgcolor: 'error.main', borderRadius: '8px', color: 'error.contrastText', display: 'flex' }}>
+              <Delete sx={{ fontSize: 24 }} />
+            </Box>
             Eliminar seleccionados
           </Box>
         </DialogTitle>
-        <DialogContent sx={{ pt: 1 }}>
-          <Typography>
+        <DialogContent>
+          <Typography sx={{ fontSize: FS.body }}>
             ¿Eliminar los <strong>{boughtSelectedIds.size}</strong> productos seleccionados de esta compra?
           </Typography>
+          <NameList names={boughtNames} />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setBoughtBulkDeleteConfirm(false)}>Cancelar</Button>
-          <Button variant="contained" color="error" startIcon={<Delete />} onClick={handleBoughtBulkDelete} disabled={boughtBulkDeleting}>
+          <Button onClick={() => setBoughtBulkDeleteConfirm(false)} disabled={boughtBulkDeleting}>Cancelar</Button>
+          <Button variant="contained" color="error" startIcon={boughtBulkDeleting ? <CircularProgress size={16} color="inherit" /> : <Delete />} onClick={handleBoughtBulkDelete} disabled={boughtBulkDeleting}>
             {boughtBulkDeleting ? 'Eliminando…' : 'Eliminar'}
           </Button>
         </DialogActions>

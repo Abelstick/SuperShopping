@@ -5,6 +5,7 @@ import ProtectedRoute from '@/shared/components/ProtectedRoute'
 import LoginPage from '@/features/auth/pages/LoginPage'
 import RegisterPage from '@/features/auth/pages/RegisterPage'
 import ForgotPasswordPage from '@/features/auth/pages/ForgotPasswordPage'
+import ResetPasswordPage from '@/features/auth/pages/ResetPasswordPage'
 import ProfilePage from '@/features/auth/pages/ProfilePage'
 
 import DashboardPage from '@/features/dashboard/pages/DashboardPage'
@@ -36,6 +37,10 @@ export const router = createBrowserRouter([
   {
     path: '/auth/forgot-password',
     element: <ForgotPasswordPage />,
+  },
+  {
+    path: '/auth/reset-password',
+    element: <ResetPasswordPage />,
   },
   {
     path: '/',

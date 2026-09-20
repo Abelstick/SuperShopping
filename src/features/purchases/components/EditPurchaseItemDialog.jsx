@@ -1,15 +1,31 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   Dialog, DialogTitle, DialogContent, DialogActions, Button,
-  TextField, Box, Typography, Stack, Grid, Checkbox, FormControlLabel,
+  TextField, Box, Typography, Checkbox, FormControlLabel, InputAdornment, CircularProgress,
 } from '@mui/material'
 import { useSnackbar } from 'notistack'
+import { fmtMoney } from '@/shared/utils/format'
+
+// Tamaños: 20 título · 15 texto · 13 meta
+const FS = { title: 20, body: 15, meta: 13 }
+
+// Validación al salir del campo (on blur) y de nuevo al guardar
+const validators = {
+  product_name: (v) => (String(v).trim() ? '' : 'Ingresa el nombre del producto.'),
+  quantity: (v) => (Number(v) > 0 ? '' : 'La cantidad debe ser mayor a 0.'),
+  unit_price: (v) => (v !== '' && v !== null && Number(v) < 0 ? 'El precio no puede ser negativo.' : ''),
+}
+const FIELD_ORDER = ['product_name', 'quantity', 'unit_price']
 
 export default function EditPurchaseItemDialog({ open, item, onSave, onClose }) {
   const { enqueueSnackbar } = useSnackbar()
   const [form, setForm] = useState({ product_name: '', brand: '', quantity: 1, unit_price: '', unit: 'unidad' })
   const [multiplyQty, setMultiplyQty] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [fieldErrors, setFieldErrors] = useState({})
+  const nameRef = useRef(null)
+  const qtyRef = useRef(null)
+  const priceRef = useRef(null)
 
   useEffect(() => {
     if (open && item) {
@@ -24,6 +40,7 @@ export default function EditPurchaseItemDialog({ open, item, onSave, onClose }) 
         unit_price: item.unit_price ?? '',
         unit: item.unit || 'unidad',
       })
+      setFieldErrors({})
     }
   }, [open, item])
 
@@ -31,8 +48,18 @@ export default function EditPurchaseItemDialog({ open, item, onSave, onClose }) 
     ? Number(form.quantity || 0) * Number(form.unit_price || 0)
     : Number(form.unit_price || 0)
 
+  const set = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }))
+  const blur = (field) => () => setFieldErrors((errs) => ({ ...errs, [field]: validators[field](form[field]) }))
+
   const handleSave = async () => {
-    if (!form.product_name.trim()) return
+    const errs = Object.fromEntries(FIELD_ORDER.map((f) => [f, validators[f](form[f])]))
+    setFieldErrors(errs)
+    const firstInvalid = FIELD_ORDER.find((f) => errs[f])
+    if (firstInvalid) {
+      const refs = { product_name: nameRef, quantity: qtyRef, unit_price: priceRef }
+      refs[firstInvalid].current?.focus()
+      return
+    }
     setSaving(true)
     const { error } = await onSave(item.id, {
       product_name: form.product_name.trim(),
@@ -49,54 +76,52 @@ export default function EditPurchaseItemDialog({ open, item, onSave, onClose }) 
   }
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth slotProps={{ paper: { sx: { borderRadius: 3 } } }}>
-      <DialogTitle sx={{ pb: 1 }}>
-        <Typography variant="h6" fontWeight={700}>Editar producto</Typography>
+    <Dialog open={open} onClose={saving ? undefined : onClose} maxWidth="xs" fullWidth>
+      <DialogTitle>
+        <Typography component="span" sx={{ fontSize: FS.title, fontWeight: 700, lineHeight: 1.3 }}>Editar producto</Typography>
       </DialogTitle>
       <DialogContent>
-        <Stack spacing={2} sx={{ mt: 1 }}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
           <TextField
-            fullWidth label="Producto *" value={form.product_name}
-            onChange={(e) => setForm((f) => ({ ...f, product_name: e.target.value }))}
-            autoFocus
+            fullWidth label="Producto" required value={form.product_name}
+            onChange={set('product_name')} onBlur={blur('product_name')}
+            error={Boolean(fieldErrors.product_name)} helperText={fieldErrors.product_name || ' '}
+            inputRef={nameRef} autoFocus
           />
-          <TextField
-            fullWidth label="Marca (opcional)" value={form.brand}
-            onChange={(e) => setForm((f) => ({ ...f, brand: e.target.value }))}
-          />
-          <Grid container spacing={1.5}>
-            <Grid size={{ xs: 5 }}>
-              <TextField
-                fullWidth type="number" label="Cant." value={form.quantity}
-                onChange={(e) => setForm((f) => ({ ...f, quantity: e.target.value }))}
-                slotProps={{ htmlInput: { min: 0.01, step: 0.01 } }}
-              />
-            </Grid>
-            <Grid size={{ xs: 7 }}>
-              <TextField
-                fullWidth type="number" label="Precio"
-                value={form.unit_price}
-                onChange={(e) => setForm((f) => ({ ...f, unit_price: e.target.value }))}
-                slotProps={{ input: { startAdornment: <Box component="span" sx={{ mr: 0.5, color: 'text.secondary', fontSize: 14 }}>S/</Box> } }}
-              />
-            </Grid>
-          </Grid>
+          <TextField fullWidth label="Marca (opcional)" value={form.brand} onChange={set('brand')} />
+          <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: '5fr 7fr' }}>
+            <TextField
+              fullWidth type="number" label="Cant." value={form.quantity}
+              onChange={set('quantity')} onBlur={blur('quantity')}
+              error={Boolean(fieldErrors.quantity)} helperText={fieldErrors.quantity || ' '}
+              inputRef={qtyRef}
+              slotProps={{ htmlInput: { min: 0.01, step: 0.01, inputMode: 'decimal' } }}
+            />
+            <TextField
+              fullWidth type="number" label="Precio" value={form.unit_price}
+              onChange={set('unit_price')} onBlur={blur('unit_price')}
+              error={Boolean(fieldErrors.unit_price)} helperText={fieldErrors.unit_price || ' '}
+              inputRef={priceRef}
+              slotProps={{ input: { startAdornment: <InputAdornment position="start">S/</InputAdornment> }, htmlInput: { min: 0, step: 0.01, inputMode: 'decimal' } }}
+            />
+          </Box>
           <FormControlLabel
-            control={<Checkbox size="small" checked={multiplyQty} onChange={(e) => setMultiplyQty(e.target.checked)} />}
-            label={<Typography variant="caption" color="text.secondary">Multiplicar por cantidad</Typography>}
+            control={<Checkbox checked={multiplyQty} onChange={(e) => setMultiplyQty(e.target.checked)} />}
+            label={<Typography component="span" sx={{ fontSize: FS.body, color: 'text.secondary' }}>Multiplicar por cantidad</Typography>}
             sx={{ m: 0 }}
           />
           {total > 0 && (
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', p: 1.5, bgcolor: 'action.hover', borderRadius: 2 }}>
-              <Typography variant="body2" color="text.secondary">{multiplyQty ? 'Subtotal' : 'Total'}</Typography>
-              <Typography variant="h6" fontWeight={700} color="primary">S/{total.toFixed(2)}</Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, p: 2, bgcolor: 'action.hover', borderRadius: '8px' }}>
+              <Typography sx={{ fontSize: FS.body, color: 'text.secondary' }}>{multiplyQty ? 'Subtotal' : 'Total'}</Typography>
+              <Typography sx={{ fontSize: FS.title, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{fmtMoney(total)}</Typography>
             </Box>
           )}
-        </Stack>
+        </Box>
       </DialogContent>
-      <DialogActions sx={{ px: 3, pb: 3 }}>
-        <Button onClick={onClose} color="inherit">Cancelar</Button>
-        <Button variant="contained" onClick={handleSave} disabled={saving || !form.product_name.trim()} fullWidth>
+      <DialogActions>
+        <Button onClick={onClose} disabled={saving} color="inherit" sx={{ color: 'text.secondary' }}>Cancelar</Button>
+        <Button variant="contained" onClick={handleSave} disabled={saving} sx={{ flexGrow: 1 }}
+          startIcon={saving ? <CircularProgress size={16} color="inherit" /> : undefined}>
           {saving ? 'Guardando…' : 'Guardar cambios'}
         </Button>
       </DialogActions>
