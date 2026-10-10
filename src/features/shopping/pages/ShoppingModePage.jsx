@@ -4,12 +4,12 @@ import { supabase } from '@/lib/supabase'
 import {
   Box, Typography, Card, IconButton, Avatar, AvatarGroup, Button, Divider,
   Dialog, DialogTitle, DialogContent, DialogActions,
-  LinearProgress, Tooltip, Fab, CircularProgress, Checkbox, Skeleton, useTheme,
+  LinearProgress, Tooltip, Fab, CircularProgress, Checkbox, Skeleton, TextField, InputAdornment, useTheme,
 } from '@mui/material'
 import { alpha } from '@mui/material/styles'
 import {
   ShoppingCart, Lock, LockOpen, Add, CheckCircle,
-  ArrowBack, Done, Delete, ExpandMore, ExpandLess, Store, Edit, ErrorOutlined, Receipt,
+  ArrowBack, Done, Delete, ExpandMore, ExpandLess, Store, Edit, ErrorOutlined, Receipt, Search, Close,
 } from '@mui/icons-material'
 import { useSnackbar } from 'notistack'
 import { useAuthStore } from '@/features/auth/store/authStore'
@@ -31,6 +31,11 @@ const FS = { hero: 48, heroXs: 36, title: 20, body: 15, meta: 13 }
 const NUM = { fontVariantNumeric: 'tabular-nums' }
 const DRAWER_WIDTH = 252
 const APPBAR_HEIGHT = 52
+const COMPACT_KEY = 'shopping.headerCompact'
+
+// Búsqueda sin tildes ni mayúsculas
+const norm = (s) => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
+const readCompact = () => { try { return localStorage.getItem(COMPACT_KEY) === '1' } catch { return false } }
 
 // ── Lista con nombres para las confirmaciones ────────────────────────────────
 function NameList({ names }) {
@@ -260,6 +265,15 @@ export default function ShoppingModePage() {
   const [pendingSelectMode, setPendingSelectMode] = useState(false)
   const [pendingSelectedIds, setPendingSelectedIds] = useState(new Set())
   const [pendingBulkAdding, setPendingBulkAdding] = useState(false)
+  const [query, setQuery] = useState('')
+  const [headerCompact, setHeaderCompact] = useState(readCompact)
+
+  const toggleHeaderCompact = () => {
+    setHeaderCompact((c) => {
+      try { localStorage.setItem(COMPACT_KEY, c ? '0' : '1') } catch { /* sin almacenamiento */ }
+      return !c
+    })
+  }
 
   // React StrictMode mounts effects twice in development to surface unguarded
   // side effects; without this guard, init() would run concurrently both times
@@ -367,6 +381,12 @@ export default function ShoppingModePage() {
   const purchasedIds = new Set(purchaseItems.map((p) => p.budget_item_id).filter(Boolean))
   const pendingItems = budgetItems.filter((i) => !purchasedIds.has(i.id))
   const boughtBudgetItems = budgetItems.filter((i) => purchasedIds.has(i.id))
+
+  const q = norm(query)
+  const matches = (...fields) => !q || fields.some((f) => norm(f).includes(q))
+  const visiblePending = pendingItems.filter((i) => matches(i.product_name, i.categories?.name))
+  const visiblePurchased = purchaseItems.filter((i) => matches(i.product_name, i.brand))
+  const boughtOpen = showBought || Boolean(q)
 
   const exitBoughtSelectMode = () => {
     setBoughtSelectMode(false)
@@ -546,10 +566,20 @@ export default function ShoppingModePage() {
               </Tooltip>
             ))}
           </AvatarGroup>
+          <Tooltip title={headerCompact ? 'Mostrar resumen' : 'Ocultar resumen'}>
+            <IconButton
+              aria-label={headerCompact ? 'Mostrar resumen' : 'Ocultar resumen'}
+              aria-expanded={!headerCompact}
+              onClick={toggleHeaderCompact}
+              sx={{ mr: -1 }}
+            >
+              {headerCompact ? <ExpandMore fontSize="small" /> : <ExpandLess fontSize="small" />}
+            </IconButton>
+          </Tooltip>
         </Box>
 
         {/* Título */}
-        <Box sx={{ mb: 2 }}>
+        <Box sx={{ mb: headerCompact ? 1 : 2 }}>
           <Typography component="h1" sx={{ fontSize: FS.title, fontWeight: 800, lineHeight: 1.3, letterSpacing: '-0.01em' }} noWrap>{currentBudget?.name ?? 'Modo Compra'}</Typography>
           {currentBudget?.store && (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
@@ -559,7 +589,21 @@ export default function ShoppingModePage() {
           )}
         </Box>
 
+        {/* Resumen compacto: mismo dato hero en una línea */}
+        {headerCompact && (
+          <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 2 }}>
+            <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1, minWidth: 0 }}>
+              <Typography component="span" sx={{ fontSize: FS.meta, color: 'text.secondary' }}>{heroLabel}</Typography>
+              <Typography component="span" sx={{ ...NUM, fontSize: FS.title, fontWeight: 800, color: heroSkin.text }}>{fmtMoney(heroValue)}</Typography>
+            </Box>
+            <Typography component="span" sx={{ ...NUM, fontSize: FS.meta, color: 'text.secondary', flexShrink: 0 }}>
+              {purchaseItems.length} en carrito
+            </Typography>
+          </Box>
+        )}
+
         {/* Hero + KPIs */}
+        {!headerCompact && (
         <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: 'minmax(0, 3fr) minmax(0, 2fr)' }}>
           <Card sx={{ bgcolor: heroSkin.tint, borderColor: heroSkin.line, p: 2, display: 'flex', flexDirection: 'column', gap: 0.5, justifyContent: 'center' }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -583,6 +627,7 @@ export default function ShoppingModePage() {
             </Card>
           </Box>
         </Box>
+        )}
 
         {/* Progress bar */}
         {hasBudget && (
@@ -590,9 +635,31 @@ export default function ShoppingModePage() {
             aria-hidden
             variant="determinate"
             value={progress}
-            sx={{ height: 8, mt: 2, bgcolor: 'action.hover', '& .MuiLinearProgress-bar': { bgcolor: progressColor } }}
+            sx={{ height: 8, mt: headerCompact ? 1 : 2, bgcolor: 'action.hover', '& .MuiLinearProgress-bar': { bgcolor: progressColor } }}
           />
         )}
+
+        {/* Buscador de productos (pendientes y agregados) */}
+        <TextField
+          fullWidth
+          size="small"
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Buscar producto…"
+          sx={{ mt: headerCompact ? 1.5 : 2 }}
+          slotProps={{
+            htmlInput: { 'aria-label': 'Buscar producto' },
+            input: {
+              startAdornment: <InputAdornment position="start"><Search fontSize="small" /></InputAdornment>,
+              endAdornment: query ? (
+                <InputAdornment position="end">
+                  <IconButton size="small" aria-label="Limpiar búsqueda" onClick={() => setQuery('')} edge="end"><Close fontSize="small" /></IconButton>
+                </InputAdornment>
+              ) : null,
+            },
+          }}
+        />
       </Box>
 
       {/* ── Purchased items section ── */}
@@ -601,11 +668,11 @@ export default function ShoppingModePage() {
           <Button
             fullWidth
             variant="text"
-            aria-expanded={showBought}
-            startIcon={showBought ? <ExpandLess /> : <ExpandMore />}
+            aria-expanded={boughtOpen}
+            startIcon={boughtOpen ? <ExpandLess /> : <ExpandMore />}
             endIcon={(
               <Box sx={{ ...NUM, px: 1, minWidth: 28, borderRadius: '8px', bgcolor: 'action.selected', color: 'primary.main', fontSize: FS.meta, fontWeight: 700, lineHeight: 1.7 }}>
-                {purchaseItems.length}
+                {q ? `${visiblePurchased.length}/${purchaseItems.length}` : purchaseItems.length}
               </Box>
             )}
             onClick={() => setShowBought(!showBought)}
@@ -616,7 +683,7 @@ export default function ShoppingModePage() {
             </Typography>
           </Button>
 
-          {showBought && (
+          {boughtOpen && (
             <Card className="select-in">
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, px: 2, py: 1, flexWrap: 'wrap' }}>
                 {boughtSelectMode ? (
@@ -625,7 +692,7 @@ export default function ShoppingModePage() {
                       {boughtSelectedIds.size} seleccionado{boughtSelectedIds.size !== 1 ? 's' : ''}
                     </Typography>
                     <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
-                      <Button onClick={() => setBoughtSelectedIds(new Set(purchaseItems.map((i) => i.id)))}>Todos</Button>
+                      <Button onClick={() => setBoughtSelectedIds(new Set(visiblePurchased.map((i) => i.id)))}>Todos</Button>
                       <Button onClick={() => setBoughtSelectedIds(new Set())}>Ninguno</Button>
                       <Button variant="outlined" startIcon={<Delete sx={{ fontSize: 20 }} />} disabled={boughtSelectedIds.size === 0} onClick={() => setBoughtBulkDeleteConfirm(true)}>
                         Eliminar
@@ -642,7 +709,12 @@ export default function ShoppingModePage() {
               </Box>
               <Divider />
               <Box>
-                {purchaseItems.map((pi, i) => (
+                {visiblePurchased.length === 0 && (
+                  <Typography sx={{ fontSize: FS.body, color: 'text.secondary', px: 2, py: 2 }}>
+                    Ningún producto del carrito coincide con "{query.trim()}".
+                  </Typography>
+                )}
+                {visiblePurchased.map((pi, i) => (
                   <Box key={pi.id}>
                     <PurchasedItemRow
                       item={pi}
@@ -652,7 +724,7 @@ export default function ShoppingModePage() {
                       selected={boughtSelectedIds.has(pi.id)}
                       onToggleSelect={() => toggleBoughtSelected(pi.id)}
                     />
-                    {i < purchaseItems.length - 1 && <Divider sx={{ mx: 2 }} />}
+                    {i < visiblePurchased.length - 1 && <Divider sx={{ mx: 2 }} />}
                   </Box>
                 ))}
               </Box>
@@ -673,7 +745,7 @@ export default function ShoppingModePage() {
                 <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
                   <Button
                     onClick={() => setPendingSelectedIds(new Set(
-                      pendingItems.filter((i) => { const l = getLockForItem(i.id); return !l || l.user_id === user?.id }).map((i) => i.id)
+                      visiblePending.filter((i) => { const l = getLockForItem(i.id); return !l || l.user_id === user?.id }).map((i) => i.id)
                     ))}
                   >
                     Todos
@@ -693,13 +765,18 @@ export default function ShoppingModePage() {
             ) : (
               <>
                 <Typography component="h2" sx={{ ...NUM, fontSize: FS.title, fontWeight: 700, lineHeight: 1.3 }}>
-                  Pendientes ({pendingItems.length})
+                  Pendientes ({q ? `${visiblePending.length}/${pendingItems.length}` : pendingItems.length})
                 </Typography>
                 <Button onClick={() => { setPendingSelectMode(true); setPendingSelectedIds(new Set()) }}>Seleccionar varios</Button>
               </>
             )}
           </Box>
-          {pendingItems.map((item) => {
+          {visiblePending.length === 0 && (
+            <Typography sx={{ fontSize: FS.body, color: 'text.secondary', mb: 2 }}>
+              Ningún pendiente coincide con "{query.trim()}".
+            </Typography>
+          )}
+          {visiblePending.map((item) => {
             const lock = getLockForItem(item.id)
             return (
               <BudgetItemCard
@@ -733,6 +810,19 @@ export default function ShoppingModePage() {
             ))}
           </Box>
         </Box>
+      )}
+
+      {/* Búsqueda sin el producto buscado: agregarlo directo con el nombre ya escrito */}
+      {q && (
+        <Button
+          fullWidth
+          variant="outlined"
+          startIcon={<Add />}
+          onClick={() => setAddItemDialog({ open: true, item: null, name: query.trim() })}
+          sx={{ mb: 3, justifyContent: 'flex-start' }}
+        >
+          Agregar "{query.trim()}" al carrito
+        </Button>
       )}
 
       {/* Empty state */}
@@ -853,6 +943,7 @@ export default function ShoppingModePage() {
       <AddItemDialog
         open={addItemDialog.open}
         budgetItem={addItemDialog.item}
+        initialName={addItemDialog.name}
         sessionId={session?.id}
         purchaseId={purchase?.id}
         userId={user?.id}
