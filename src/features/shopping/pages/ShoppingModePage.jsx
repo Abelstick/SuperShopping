@@ -4,12 +4,12 @@ import { supabase } from '@/lib/supabase'
 import {
   Box, Typography, Card, IconButton, Avatar, AvatarGroup, Button, Divider,
   Dialog, DialogTitle, DialogContent, DialogActions,
-  LinearProgress, Tooltip, Fab, CircularProgress, Checkbox, Skeleton, TextField, InputAdornment, useTheme,
+  LinearProgress, Tooltip, CircularProgress, Checkbox, Skeleton, TextField, InputAdornment, useTheme,
 } from '@mui/material'
-import { alpha } from '@mui/material/styles'
 import {
   ShoppingCart, Lock, LockOpen, Add, CheckCircle,
   ArrowBack, Done, Delete, ExpandMore, ExpandLess, Store, Edit, ErrorOutlined, Receipt, Search, Close,
+  Remove, DensitySmall, DensityMedium,
 } from '@mui/icons-material'
 import { useSnackbar } from 'notistack'
 import { useAuthStore } from '@/features/auth/store/authStore'
@@ -32,10 +32,31 @@ const NUM = { fontVariantNumeric: 'tabular-nums' }
 const DRAWER_WIDTH = 252
 const APPBAR_HEIGHT = 52
 const COMPACT_KEY = 'shopping.headerCompact'
+const DENSITY_KEY = 'shopping.density'
+const SUGGESTIONS_MAX = 6
 
 // Búsqueda sin tildes ni mayúsculas
 const norm = (s) => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
-const readCompact = () => { try { return localStorage.getItem(COMPACT_KEY) === '1' } catch { return false } }
+// Sin preferencia guardada, el celular arranca en vista compacta (más productos a la vista)
+const isSmallScreen = () => { try { return window.matchMedia('(max-width:639.95px)').matches } catch { return false } }
+const readCompact = () => {
+  try {
+    const v = localStorage.getItem(COMPACT_KEY)
+    return v === null ? isSmallScreen() : v === '1'
+  } catch { return isSmallScreen() }
+}
+const readDensity = () => {
+  try {
+    const v = localStorage.getItem(DENSITY_KEY)
+    if (v === 'compact' || v === 'comfortable') return v
+  } catch { /* sin almacenamiento */ }
+  return isSmallScreen() ? 'compact' : 'comfortable'
+}
+
+// Paso del +/- según la unidad: 1 para conteos, medio para kg/L, 100 para g/ml
+const STEPS = { kg: 0.5, L: 0.5, g: 100, ml: 100 }
+const stepFor = (unit) => STEPS[unit] ?? 1
+const roundQty = (n) => Math.round(n * 100) / 100
 
 // ── Lista con nombres para las confirmaciones ────────────────────────────────
 function NameList({ names }) {
@@ -49,8 +70,18 @@ function NameList({ names }) {
   )
 }
 
+// ── Dato del resumen ampliado (Presupuesto · Gastado · Items) ────────────────
+function SummaryStat({ label, value }) {
+  return (
+    <Card sx={{ px: 1.5, py: 1, minWidth: 0 }}>
+      <Typography sx={{ fontSize: FS.meta, color: 'text.secondary' }} noWrap>{label}</Typography>
+      <Typography sx={{ ...NUM, fontSize: FS.body, fontWeight: 700, lineHeight: 1.5 }} noWrap>{value}</Typography>
+    </Card>
+  )
+}
+
 // ── Budget Item Card ─────────────────────────────────────────────────────────
-function BudgetItemCard({ item, lock, isLockedByMe, sessionId, userId, alreadyBought, onAddItem, selectMode, selected, onToggleSelect }) {
+function BudgetItemCard({ item, lock, isLockedByMe, sessionId, userId, alreadyBought, onAddItem, selectMode, selected, onToggleSelect, compact }) {
   const theme = useTheme()
   const st = theme.palette.stock
   const { lockItem, unlockItem } = useShoppingStore()
@@ -71,11 +102,18 @@ function BudgetItemCard({ item, lock, isLockedByMe, sessionId, userId, alreadyBo
 
   const lockTitle = isLockedByMe ? 'Liberar' : isLocked ? 'Reservado por otro' : 'Reservar para mí'
   const addTitle = canInteract ? 'Agregar al carrito' : 'Reservado'
+  const dotColor = item.categories?.color || theme.palette.text.disabled
+  // Vista compacta: cantidad, precio y categoría en una sola línea de texto
+  const metaLine = [
+    `${item.quantity} ${item.unit}`,
+    item.estimated_price ? `~${fmtMoney(item.estimated_price)}` : null,
+    item.categories?.name,
+  ].filter(Boolean).join(' · ')
 
   return (
     <Card
       sx={{
-        mb: 2,
+        mb: compact ? 1 : 2,
         borderWidth: 1,
         borderColor: isLockedByMe ? 'primary.main' : isLocked ? st.riesgo.line : 'divider',
         transition: 'border-color 140ms',
@@ -84,42 +122,46 @@ function BudgetItemCard({ item, lock, isLockedByMe, sessionId, userId, alreadyBo
       }}
       onClick={selectMode && canInteract ? onToggleSelect : undefined}
     >
-      <Box sx={{ p: 2, display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
+      <Box sx={{ px: 2, py: compact ? 1 : 2, display: 'flex', alignItems: compact ? 'center' : 'flex-start', gap: 1.5 }}>
         {selectMode ? (
           <Checkbox
             className="select-in"
             checked={selected}
             disabled={!canInteract}
-            sx={{ ml: -1, mt: -1 }}
+            sx={{ ml: -1, mt: compact ? 0 : -1 }}
             onClick={(e) => { e.stopPropagation(); onToggleSelect() }}
             inputProps={{ 'aria-label': `Seleccionar ${item.product_name}` }}
           />
         ) : (
-          <Box sx={{ width: 12, height: 12, borderRadius: '50%', flexShrink: 0, mt: 0.75, bgcolor: item.categories?.color || theme.palette.text.disabled }} />
+          <Box sx={{ width: compact ? 10 : 12, height: compact ? 10 : 12, borderRadius: '50%', flexShrink: 0, mt: compact ? 0 : 0.75, bgcolor: dotColor }} />
         )}
 
         <Box sx={{ flexGrow: 1, minWidth: 0 }}>
           <Typography sx={{ fontSize: FS.body, fontWeight: 700 }} noWrap>{item.product_name}</Typography>
-          <Box sx={{ display: 'flex', columnGap: 1, rowGap: 0.5, flexWrap: 'wrap', mt: 0.5, alignItems: 'center' }}>
-            <Box sx={{ ...NUM, px: 1, py: 0.5, borderRadius: '8px', border: 1, borderColor: 'divider', fontSize: FS.meta, fontWeight: 600, lineHeight: 1.4 }}>
-              {item.quantity} {item.unit}
-            </Box>
-            {item.estimated_price && (
+          {compact ? (
+            <Typography sx={{ ...NUM, fontSize: FS.meta, color: 'text.secondary' }} noWrap>{metaLine}</Typography>
+          ) : (
+            <Box sx={{ display: 'flex', columnGap: 1, rowGap: 0.5, flexWrap: 'wrap', mt: 0.5, alignItems: 'center' }}>
               <Box sx={{ ...NUM, px: 1, py: 0.5, borderRadius: '8px', border: 1, borderColor: 'divider', fontSize: FS.meta, fontWeight: 600, lineHeight: 1.4 }}>
-                ~{fmtMoney(item.estimated_price)}
+                {item.quantity} {item.unit}
               </Box>
-            )}
-            {item.categories && (
-              <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 1, px: 1, py: 0.5, borderRadius: '8px', bgcolor: 'action.hover' }}>
-                <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: item.categories.color }} />
-                <Typography component="span" sx={{ fontSize: FS.meta, fontWeight: 600, lineHeight: 1.4 }}>{item.categories.name}</Typography>
-              </Box>
-            )}
-          </Box>
+              {item.estimated_price && (
+                <Box sx={{ ...NUM, px: 1, py: 0.5, borderRadius: '8px', border: 1, borderColor: 'divider', fontSize: FS.meta, fontWeight: 600, lineHeight: 1.4 }}>
+                  ~{fmtMoney(item.estimated_price)}
+                </Box>
+              )}
+              {item.categories && (
+                <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 1, px: 1, py: 0.5, borderRadius: '8px', bgcolor: 'action.hover' }}>
+                  <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: item.categories.color }} />
+                  <Typography component="span" sx={{ fontSize: FS.meta, fontWeight: 600, lineHeight: 1.4 }}>{item.categories.name}</Typography>
+                </Box>
+              )}
+            </Box>
+          )}
 
           {/* Lock status: icono + texto + tono (nunca solo color) */}
           {isLocked && !isLockedByMe && lock && (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1, color: st.riesgo.text }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: compact ? 0.5 : 1, color: st.riesgo.text }}>
               <Lock sx={{ fontSize: 16, color: st.riesgo.icon }} />
               <Avatar src={lock.profiles?.avatar_url} sx={{ width: 20, height: 20, fontSize: FS.meta }}>
                 {lock.profiles?.full_name?.[0]}
@@ -130,7 +172,7 @@ function BudgetItemCard({ item, lock, isLockedByMe, sessionId, userId, alreadyBo
             </Box>
           )}
           {isLockedByMe && (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1, color: 'primary.main' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: compact ? 0.5 : 1, color: 'primary.main' }}>
               <Lock sx={{ fontSize: 16 }} />
               <Typography sx={{ fontSize: FS.meta, fontWeight: 700, color: 'inherit' }}>Lo estás comprando tú</Typography>
             </Box>
@@ -170,52 +212,102 @@ function BudgetItemCard({ item, lock, isLockedByMe, sessionId, userId, alreadyBo
   )
 }
 
+// ── Producto del inventario encontrado en la búsqueda (agregar con un toque) ─
+function InventorySuggestionRow({ product, compact, onAdd }) {
+  const meta = [`${product.current_quantity} ${product.unit} en stock`, product.categories?.name].filter(Boolean).join(' · ')
+  return (
+    <Box sx={{ px: 2, py: compact ? 0.5 : 1, minHeight: compact ? 52 : 64, display: 'flex', alignItems: 'center', gap: 1.5 }}>
+      <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+        <Typography sx={{ fontSize: FS.body, fontWeight: 700 }} noWrap>{product.name}</Typography>
+        <Typography sx={{ ...NUM, fontSize: FS.meta, color: 'text.secondary' }} noWrap>{meta}</Typography>
+      </Box>
+      <Tooltip title="Agregar al carrito">
+        <IconButton
+          aria-label={`Agregar ${product.name} al carrito`}
+          onClick={() => onAdd(product)}
+          sx={{ flexShrink: 0, bgcolor: 'primary.main', color: 'primary.contrastText', '&:hover': { bgcolor: 'primary.dark' } }}
+        >
+          <Add fontSize="small" />
+        </IconButton>
+      </Tooltip>
+    </Box>
+  )
+}
+
+// ── Selector de cantidad − n + ───────────────────────────────────────────────
+function QtyStepper({ item, size, onStep }) {
+  const canDecrease = roundQty(Number(item.quantity) - stepFor(item.unit)) > 0
+  const btn = { width: size, height: size, minWidth: size, minHeight: size }
+  return (
+    <Box role="group" aria-label={`Cantidad de ${item.product_name}`} sx={{ display: 'inline-flex', alignItems: 'center', border: 1, borderColor: 'divider', borderRadius: '8px' }}>
+      <IconButton aria-label={`Disminuir cantidad de ${item.product_name}`} disabled={!canDecrease} onClick={() => onStep(item, -1)} sx={btn}>
+        <Remove fontSize="small" />
+      </IconButton>
+      <Typography aria-live="polite" sx={{ ...NUM, minWidth: 40, textAlign: 'center', fontSize: FS.body, fontWeight: 700 }}>
+        {Number(item.quantity)}
+      </Typography>
+      <IconButton aria-label={`Aumentar cantidad de ${item.product_name}`} onClick={() => onStep(item, 1)} sx={btn}>
+        <Add fontSize="small" />
+      </IconButton>
+    </Box>
+  )
+}
+
 // ── Purchased Item Row ───────────────────────────────────────────────────────
-function PurchasedItemRow({ item, onRemove, onEdit, selectMode, selected, onToggleSelect }) {
+function PurchasedItemRow({ item, onRemove, onEdit, onStep, selectMode, selected, onToggleSelect, compact }) {
+  const controlSize = compact ? 40 : 44
   return (
     <Box
-      sx={{ px: 2, py: 1, minHeight: 64, display: 'flex', alignItems: 'center', gap: 2, cursor: selectMode ? 'pointer' : 'default' }}
+      sx={{ px: 2, py: compact ? 1 : 1.5, display: 'flex', alignItems: 'flex-start', gap: 1.5, cursor: selectMode ? 'pointer' : 'default' }}
       onClick={selectMode ? onToggleSelect : undefined}
     >
       {selectMode ? (
         <Checkbox
           className="select-in"
           checked={selected}
-          sx={{ ml: -1 }}
+          sx={{ ml: -1, mt: -0.5 }}
           onClick={(e) => { e.stopPropagation(); onToggleSelect() }}
           inputProps={{ 'aria-label': `Seleccionar ${item.product_name}` }}
         />
       ) : (
-        <CheckCircle sx={{ fontSize: 20, flexShrink: 0, color: 'primary.main' }} />
+        <CheckCircle sx={{ fontSize: 20, flexShrink: 0, mt: 0.25, color: 'primary.main' }} />
       )}
+
       <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-        <Typography sx={{ fontSize: FS.body, fontWeight: 700 }}>
-          {item.product_name}
-          {item.brand && <Box component="span" sx={{ color: 'text.secondary', fontWeight: 400 }}> · {item.brand}</Box>}
-        </Typography>
-        <Box sx={{ display: 'flex', columnGap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
-          <Typography sx={{ ...NUM, fontSize: FS.meta, color: 'text.secondary' }}>{item.quantity} {item.unit}</Typography>
-          {item.profiles && <Typography sx={{ fontSize: FS.meta, color: 'text.secondary' }}>· {item.profiles.full_name}</Typography>}
+        {/* Línea 1: nombre + importe */}
+        <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 2 }}>
+          <Typography sx={{ fontSize: FS.body, fontWeight: 700, minWidth: 0 }} noWrap={compact}>
+            {item.product_name}
+            {item.brand && <Box component="span" sx={{ color: 'text.secondary', fontWeight: 400 }}> · {item.brand}</Box>}
+          </Typography>
+          {item.total_price != null && (
+            <Typography sx={{ ...NUM, fontSize: FS.body, fontWeight: 700, flexShrink: 0 }}>{fmtMoney(item.total_price)}</Typography>
+          )}
+        </Box>
+
+        {/* Línea 2: unidad, quién lo compró, etiqueta "No hogar" */}
+        <Box sx={{ display: 'flex', columnGap: 1, flexWrap: compact ? 'nowrap' : 'wrap', alignItems: 'center', minWidth: 0 }}>
+          <Typography sx={{ ...NUM, fontSize: FS.meta, color: 'text.secondary', flexShrink: 0 }}>{selectMode ? `${Number(item.quantity)} ${item.unit}` : item.unit}</Typography>
+          {item.profiles && <Typography sx={{ fontSize: FS.meta, color: 'text.secondary' }} noWrap>· {item.profiles.full_name}</Typography>}
           {item.is_household === false && (
-            <Box sx={{ px: 1, borderRadius: '8px', bgcolor: 'action.hover' }}>
+            <Box sx={{ px: 1, borderRadius: '8px', bgcolor: 'action.hover', flexShrink: 0 }}>
               <Typography component="span" sx={{ fontSize: FS.meta, fontWeight: 600, color: 'text.secondary', lineHeight: 1.5 }}>No hogar</Typography>
             </Box>
           )}
         </Box>
-      </Box>
-      {/* Importe y acciones: en móvil se apilan para que el nombre no se corte */}
-      <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, alignItems: { xs: 'flex-end', sm: 'center' }, gap: { xs: 0.5, sm: 2 }, flexShrink: 0 }}>
-        {item.total_price != null && (
-          <Typography sx={{ ...NUM, fontSize: FS.body, fontWeight: 700 }}>{fmtMoney(item.total_price)}</Typography>
-        )}
+
+        {/* Línea 3: cantidad y acciones, con espacio entre controles táctiles */}
         {!selectMode && (
-          <Box sx={{ display: 'flex', gap: 0.5 }}>
-            <Tooltip title="Editar">
-              <IconButton aria-label={`Editar ${item.product_name}`} onClick={() => onEdit(item)}><Edit fontSize="small" /></IconButton>
-            </Tooltip>
-            <Tooltip title="Eliminar">
-              <IconButton aria-label={`Eliminar ${item.product_name}`} onClick={() => onRemove(item)}><Delete fontSize="small" /></IconButton>
-            </Tooltip>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, mt: compact ? 0.5 : 1 }}>
+            <QtyStepper item={item} size={controlSize} onStep={onStep} />
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <Tooltip title="Editar">
+                <IconButton aria-label={`Editar ${item.product_name}`} onClick={() => onEdit(item)}><Edit fontSize="small" /></IconButton>
+              </Tooltip>
+              <Tooltip title="Eliminar">
+                <IconButton aria-label={`Eliminar ${item.product_name}`} onClick={() => onRemove(item)}><Delete fontSize="small" /></IconButton>
+              </Tooltip>
+            </Box>
           </Box>
         )}
       </Box>
@@ -241,7 +333,7 @@ export default function ShoppingModePage() {
     session, participants, purchaseItems,
     loading, startSession, fetchSession, completeSession,
     getTotals, getLockForItem, removePurchaseItem, removePurchaseItemsBulk, unsubscribe,
-    updatePurchaseItem, addPurchaseItem, unlockItem,
+    updatePurchaseItem, addPurchaseItem, unlockItem, changePurchaseItemQuantity,
   } = useShoppingStore()
   const { createPurchase, updatePurchase } = usePurchaseStore()
   const { enqueueSnackbar } = useSnackbar()
@@ -267,6 +359,16 @@ export default function ShoppingModePage() {
   const [pendingBulkAdding, setPendingBulkAdding] = useState(false)
   const [query, setQuery] = useState('')
   const [headerCompact, setHeaderCompact] = useState(readCompact)
+  const [density, setDensity] = useState(readDensity)
+  const compact = density === 'compact'
+
+  const toggleDensity = () => {
+    setDensity((d) => {
+      const next = d === 'compact' ? 'comfortable' : 'compact'
+      try { localStorage.setItem(DENSITY_KEY, next) } catch { /* sin almacenamiento */ }
+      return next
+    })
+  }
 
   const toggleHeaderCompact = () => {
     setHeaderCompact((c) => {
@@ -388,6 +490,22 @@ export default function ShoppingModePage() {
   const visiblePurchased = purchaseItems.filter((i) => matches(i.product_name, i.brand))
   const boughtOpen = showBought || Boolean(q)
 
+  // Productos del inventario que coinciden y aún no están en el carrito ni como pendiente del presupuesto
+  const inCartProductIds = new Set(purchaseItems.map((p) => p.product_id).filter(Boolean))
+  const pendingProductIds = new Set(pendingItems.map((p) => p.product_id).filter(Boolean))
+  const suggestionsAll = q
+    ? products.filter((p) => p.is_active && !inCartProductIds.has(p.id) && !pendingProductIds.has(p.id) && matches(p.name, p.categories?.name))
+    : []
+  const suggestions = suggestionsAll.slice(0, SUGGESTIONS_MAX)
+  const noResults = Boolean(q) && visiblePending.length === 0 && visiblePurchased.length === 0 && suggestionsAll.length === 0
+
+  const handleStep = async (item, dir) => {
+    const next = roundQty(Number(item.quantity) + dir * stepFor(item.unit))
+    if (next <= 0) return
+    const { error } = await changePurchaseItemQuantity(item.id, next)
+    if (error) enqueueSnackbar('No se pudo cambiar la cantidad', { variant: 'error' })
+  }
+
   const exitBoughtSelectMode = () => {
     setBoughtSelectMode(false)
     setBoughtSelectedIds(new Set())
@@ -489,7 +607,7 @@ export default function ShoppingModePage() {
     if (sessErr) {
       enqueueSnackbar('Error al finalizar la compra', { variant: 'error' })
     } else {
-      enqueueSnackbar('¡Compra finalizada! El presupuesto fue marcado como completado.', { variant: 'success' })
+      enqueueSnackbar('¡Compra finalizada! Se actualizó el inventario y el presupuesto quedó completado.', { variant: 'success' })
       navigate('/purchases')
     }
   }
@@ -530,34 +648,52 @@ export default function ShoppingModePage() {
   const progressColor = overBudget ? st.agotado.icon : progress > 80 ? st.riesgo.icon : theme.palette.primary.main
   const boughtNames = purchaseItems.filter((i) => boughtSelectedIds.has(i.id)).map((i) => i.product_name)
   const barLeft = { xs: 0, md: sidebarOpen ? DRAWER_WIDTH : 0 }
+  const summaryToggleLabel = headerCompact ? 'Ampliar resumen del gasto' : 'Reducir resumen del gasto'
+  const densityLabel = compact ? 'Cambiar a vista cómoda' : 'Cambiar a vista compacta'
+
+  const summaryToggle = (
+    <Tooltip title={summaryToggleLabel}>
+      <IconButton aria-label={summaryToggleLabel} aria-expanded={!headerCompact} onClick={toggleHeaderCompact} sx={{ flexShrink: 0, mr: -1 }}>
+        {headerCompact ? <ExpandMore fontSize="small" /> : <ExpandLess fontSize="small" />}
+      </IconButton>
+    </Tooltip>
+  )
 
   return (
-    <Box sx={{ pb: { xs: 24, md: 16 }, maxWidth: 720, mx: 'auto' }}>
+    <Box sx={{ pb: { xs: 10, md: 8 }, maxWidth: 720, mx: 'auto' }}>
 
-      {/* ── Sticky header ── */}
+      {/* ── Sticky header: título, resumen del gasto y buscador siempre a la vista ── */}
       <Box
         sx={{
           position: 'sticky', top: APPBAR_HEIGHT, zIndex: 20,
           bgcolor: 'background.default',
           borderBottom: 1, borderColor: 'divider',
-          pb: 2, pt: 1, mb: 3,
+          pb: 1.5, pt: 1, mb: { xs: 2, sm: 3 },
         }}
       >
-        {/* Estado + participantes */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-          <IconButton aria-label="Salir del modo compra" onClick={() => setExitConfirm(true)} sx={{ ml: -1 }}>
+        {/* Salir + título/estado + participantes */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <IconButton aria-label="Salir del modo compra" onClick={() => setExitConfirm(true)} sx={{ ml: -1, flexShrink: 0 }}>
             <ArrowBack fontSize="small" />
           </IconButton>
-          <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 1, px: 1.5, py: 0.5, borderRadius: '8px', bgcolor: 'action.selected', color: 'primary.main' }}>
-            <Box sx={{
-              width: 8, height: 8, borderRadius: '50%', bgcolor: 'primary.main', flexShrink: 0,
-              animation: 'shopPulse 1.6s ease-in-out infinite',
-              '@keyframes shopPulse': { '0%,100%': { opacity: 1, transform: 'scale(1)' }, '50%': { opacity: 0.45, transform: 'scale(0.75)' } },
-            }} />
-            <Typography component="span" sx={{ fontSize: FS.meta, fontWeight: 700, color: 'inherit', lineHeight: 1.4 }}>Modo compra activo</Typography>
+          <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+            <Typography component="h1" sx={{ fontSize: FS.title, fontWeight: 800, lineHeight: 1.3, letterSpacing: '-0.01em' }} noWrap>{currentBudget?.name ?? 'Modo Compra'}</Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, color: 'primary.main' }}>
+              <Box sx={{
+                width: 8, height: 8, borderRadius: '50%', bgcolor: 'primary.main', flexShrink: 0,
+                animation: 'shopPulse 1.6s ease-in-out infinite',
+                '@keyframes shopPulse': { '0%,100%': { opacity: 1, transform: 'scale(1)' }, '50%': { opacity: 0.45, transform: 'scale(0.75)' } },
+              }} />
+              <Typography component="span" sx={{ fontSize: FS.meta, fontWeight: 700, color: 'inherit', lineHeight: 1.4, flexShrink: 0 }}>Modo compra activo</Typography>
+              {currentBudget?.store && (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0, color: 'text.secondary' }}>
+                  <Store sx={{ fontSize: 16, flexShrink: 0 }} />
+                  <Typography sx={{ fontSize: FS.meta, color: 'inherit' }} noWrap>{currentBudget.store}</Typography>
+                </Box>
+              )}
+            </Box>
           </Box>
-          <Box sx={{ flexGrow: 1 }} />
-          <AvatarGroup max={4} sx={{ '& .MuiAvatar-root': { width: 32, height: 32, fontSize: FS.meta, border: `2px solid ${theme.palette.background.default}` } }}>
+          <AvatarGroup max={3} sx={{ flexShrink: 0, '& .MuiAvatar-root': { width: 32, height: 32, fontSize: FS.meta, border: `2px solid ${theme.palette.background.default}` } }}>
             {participants.map((p) => (
               <Tooltip key={p.id} title={p.profiles?.full_name ?? ''}>
                 <Avatar src={p.profiles?.avatar_url} alt={p.profiles?.full_name ?? ''} sx={{ bgcolor: 'primary.main', color: 'primary.contrastText' }}>
@@ -566,104 +702,133 @@ export default function ShoppingModePage() {
               </Tooltip>
             ))}
           </AvatarGroup>
-          <Tooltip title={headerCompact ? 'Mostrar resumen' : 'Ocultar resumen'}>
-            <IconButton
-              aria-label={headerCompact ? 'Mostrar resumen' : 'Ocultar resumen'}
-              aria-expanded={!headerCompact}
-              onClick={toggleHeaderCompact}
-              sx={{ mr: -1 }}
-            >
-              {headerCompact ? <ExpandMore fontSize="small" /> : <ExpandLess fontSize="small" />}
-            </IconButton>
-          </Tooltip>
         </Box>
 
-        {/* Título */}
-        <Box sx={{ mb: headerCompact ? 1 : 2 }}>
-          <Typography component="h1" sx={{ fontSize: FS.title, fontWeight: 800, lineHeight: 1.3, letterSpacing: '-0.01em' }} noWrap>{currentBudget?.name ?? 'Modo Compra'}</Typography>
-          {currentBudget?.store && (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-              <Store sx={{ fontSize: 16, color: 'text.secondary' }} />
-              <Typography sx={{ fontSize: FS.meta, color: 'text.secondary' }}>{currentBudget.store}</Typography>
+        {/* Resumen del gasto: compacto (una línea) o ampliado (presupuesto, gastado, saldo) */}
+        <Box sx={{ mt: 1 }}>
+          {headerCompact ? (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Box sx={{ flexGrow: 1, minWidth: 0, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 2 }}>
+                <Box sx={{ minWidth: 0 }}>
+                  <Typography sx={{ ...NUM, fontSize: FS.meta, color: 'text.secondary' }} noWrap>Gastado · {purchaseItems.length} en carrito</Typography>
+                  <Typography sx={{ ...NUM, fontSize: FS.title, fontWeight: 800, lineHeight: 1.3 }}>{fmtMoney(totalSpent)}</Typography>
+                </Box>
+                {hasBudget && (
+                  <Box sx={{ textAlign: 'right', flexShrink: 0 }}>
+                    <Typography sx={{ fontSize: FS.meta, color: 'text.secondary' }}>{heroLabel}</Typography>
+                    <Typography sx={{ ...NUM, fontSize: FS.body, fontWeight: 700, lineHeight: 1.5, color: heroSkin.text }}>{fmtMoney(heroValue)}</Typography>
+                  </Box>
+                )}
+              </Box>
+              {summaryToggle}
             </Box>
+          ) : (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+              <Card sx={{ bgcolor: heroSkin.tint, borderColor: heroSkin.line, px: 2, py: 1.5 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <HeroIcon sx={{ fontSize: 20, color: heroSkin.icon }} />
+                  <Typography component="h2" sx={{ fontSize: FS.body, fontWeight: 700, flexGrow: 1 }}>{heroLabel}</Typography>
+                  <Box sx={{ my: -1 }}>{summaryToggle}</Box>
+                </Box>
+                <Typography sx={{ ...NUM, fontSize: { xs: FS.heroXs, md: FS.hero }, fontWeight: 800, lineHeight: 1.1, letterSpacing: '-0.02em', color: heroSkin.text }}>
+                  {fmtMoney(heroValue)}
+                </Typography>
+              </Card>
+              <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: hasBudget ? 'repeat(3, minmax(0, 1fr))' : 'minmax(0, 1fr)' }}>
+                {hasBudget && <SummaryStat label="Presupuesto" value={fmtMoney(budget)} />}
+                {hasBudget && <SummaryStat label="Gastado" value={fmtMoney(totalSpent)} />}
+                <SummaryStat label="Items" value={purchaseItems.length} />
+              </Box>
+            </Box>
+          )}
+
+          {hasBudget && (
+            <LinearProgress
+              aria-hidden
+              variant="determinate"
+              value={progress}
+              sx={{ height: 8, mt: 1, bgcolor: 'action.hover', '& .MuiLinearProgress-bar': { bgcolor: progressColor } }}
+            />
           )}
         </Box>
 
-        {/* Resumen compacto: mismo dato hero en una línea */}
-        {headerCompact && (
-          <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 2 }}>
-            <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1, minWidth: 0 }}>
-              <Typography component="span" sx={{ fontSize: FS.meta, color: 'text.secondary' }}>{heroLabel}</Typography>
-              <Typography component="span" sx={{ ...NUM, fontSize: FS.title, fontWeight: 800, color: heroSkin.text }}>{fmtMoney(heroValue)}</Typography>
-            </Box>
-            <Typography component="span" sx={{ ...NUM, fontSize: FS.meta, color: 'text.secondary', flexShrink: 0 }}>
-              {purchaseItems.length} en carrito
-            </Typography>
-          </Box>
-        )}
-
-        {/* Hero + KPIs */}
-        {!headerCompact && (
-        <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: 'minmax(0, 3fr) minmax(0, 2fr)' }}>
-          <Card sx={{ bgcolor: heroSkin.tint, borderColor: heroSkin.line, p: 2, display: 'flex', flexDirection: 'column', gap: 0.5, justifyContent: 'center' }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <HeroIcon sx={{ fontSize: 20, color: heroSkin.icon }} />
-              <Typography component="h2" sx={{ fontSize: FS.body, fontWeight: 700 }}>{heroLabel}</Typography>
-            </Box>
-            <Typography sx={{ ...NUM, fontSize: { xs: FS.heroXs, md: FS.hero }, fontWeight: 800, lineHeight: 1.1, letterSpacing: '-0.02em', color: heroSkin.text }}>
-              {fmtMoney(heroValue)}
-            </Typography>
-          </Card>
-          <Box sx={{ display: 'grid', gap: 1.5, gridTemplateRows: hasBudget ? '1fr 1fr' : '1fr' }}>
-            {hasBudget && (
-              <Card sx={{ px: 2, py: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                <Typography sx={{ fontSize: FS.meta, color: 'text.secondary' }}>Gastado</Typography>
-                <Typography sx={{ ...NUM, fontSize: FS.title, fontWeight: 700, lineHeight: 1.3 }}>{fmtMoney(totalSpent)}</Typography>
-              </Card>
-            )}
-            <Card sx={{ px: 2, py: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-              <Typography sx={{ fontSize: FS.meta, color: 'text.secondary' }}>Items</Typography>
-              <Typography sx={{ ...NUM, fontSize: FS.title, fontWeight: 700, lineHeight: 1.3 }}>{purchaseItems.length}</Typography>
-            </Card>
-          </Box>
-        </Box>
-        )}
-
-        {/* Progress bar */}
-        {hasBudget && (
-          <LinearProgress
-            aria-hidden
-            variant="determinate"
-            value={progress}
-            sx={{ height: 8, mt: headerCompact ? 1 : 2, bgcolor: 'action.hover', '& .MuiLinearProgress-bar': { bgcolor: progressColor } }}
+        {/* Buscador (pendientes, carrito e inventario) + densidad de la lista */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1.5 }}>
+          <TextField
+            fullWidth
+            size="small"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Buscar producto…"
+            slotProps={{
+              htmlInput: { 'aria-label': 'Buscar producto', inputMode: 'search', enterKeyHint: 'search', autoComplete: 'off' },
+              input: {
+                startAdornment: <InputAdornment position="start"><Search fontSize="small" /></InputAdornment>,
+                endAdornment: query ? (
+                  <InputAdornment position="end">
+                    <IconButton size="small" aria-label="Limpiar búsqueda" onClick={() => setQuery('')} edge="end"><Close fontSize="small" /></IconButton>
+                  </InputAdornment>
+                ) : null,
+              },
+            }}
           />
-        )}
-
-        {/* Buscador de productos (pendientes y agregados) */}
-        <TextField
-          fullWidth
-          size="small"
-          type="search"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Buscar producto…"
-          sx={{ mt: headerCompact ? 1.5 : 2 }}
-          slotProps={{
-            htmlInput: { 'aria-label': 'Buscar producto' },
-            input: {
-              startAdornment: <InputAdornment position="start"><Search fontSize="small" /></InputAdornment>,
-              endAdornment: query ? (
-                <InputAdornment position="end">
-                  <IconButton size="small" aria-label="Limpiar búsqueda" onClick={() => setQuery('')} edge="end"><Close fontSize="small" /></IconButton>
-                </InputAdornment>
-              ) : null,
-            },
-          }}
-        />
+          <Tooltip title={densityLabel}>
+            <IconButton
+              aria-label={densityLabel}
+              onClick={toggleDensity}
+              sx={{ flexShrink: 0, border: 1, borderColor: 'divider', color: 'text.secondary' }}
+            >
+              {compact ? <DensitySmall fontSize="small" /> : <DensityMedium fontSize="small" />}
+            </IconButton>
+          </Tooltip>
+        </Box>
       </Box>
 
+      {/* ── Resultados de búsqueda: sin coincidencias + alta rápida ── */}
+      {q && noResults && (
+        <Typography role="status" sx={{ fontSize: FS.body, color: 'text.secondary', mb: 2 }}>
+          No se encontraron productos para "{query.trim()}".
+        </Typography>
+      )}
+      {q && (
+        <Button
+          fullWidth
+          variant="outlined"
+          startIcon={<Add />}
+          onClick={() => setAddItemDialog({ open: true, item: null, name: query.trim() })}
+          sx={{ mb: 3, justifyContent: 'flex-start' }}
+        >
+          Agregar "{query.trim()}" al carrito
+        </Button>
+      )}
+
+      {suggestions.length > 0 && (
+        <Box sx={{ mb: 3 }}>
+          <Typography component="h2" sx={{ ...NUM, fontSize: FS.title, fontWeight: 700, lineHeight: 1.3, mb: 1 }}>
+            En tu inventario ({suggestionsAll.length})
+          </Typography>
+          <Card>
+            {suggestions.map((p, i) => (
+              <Box key={p.id}>
+                <InventorySuggestionRow
+                  product={p}
+                  compact={compact}
+                  onAdd={(product) => setAddItemDialog({ open: true, item: null, product })}
+                />
+                {i < suggestions.length - 1 && <Divider sx={{ mx: 2 }} />}
+              </Box>
+            ))}
+          </Card>
+          {suggestionsAll.length > suggestions.length && (
+            <Typography sx={{ fontSize: FS.meta, color: 'text.secondary', mt: 1 }}>
+              +{suggestionsAll.length - suggestions.length} más — escribe más letras para afinar.
+            </Typography>
+          )}
+        </Box>
+      )}
+
       {/* ── Purchased items section ── */}
-      {purchaseItems.length > 0 && (
+      {purchaseItems.length > 0 && (!q || visiblePurchased.length > 0) && (
         <Box sx={{ mb: 3 }}>
           <Button
             fullWidth
@@ -709,17 +874,14 @@ export default function ShoppingModePage() {
               </Box>
               <Divider />
               <Box>
-                {visiblePurchased.length === 0 && (
-                  <Typography sx={{ fontSize: FS.body, color: 'text.secondary', px: 2, py: 2 }}>
-                    Ningún producto del carrito coincide con "{query.trim()}".
-                  </Typography>
-                )}
                 {visiblePurchased.map((pi, i) => (
                   <Box key={pi.id}>
                     <PurchasedItemRow
                       item={pi}
+                      compact={compact}
                       onRemove={(item) => setDeleteItemConfirm(item)}
                       onEdit={(item) => setEditItemDialog({ open: true, item })}
+                      onStep={handleStep}
                       selectMode={boughtSelectMode}
                       selected={boughtSelectedIds.has(pi.id)}
                       onToggleSelect={() => toggleBoughtSelected(pi.id)}
@@ -734,9 +896,9 @@ export default function ShoppingModePage() {
       )}
 
       {/* ── Pending budget items ── */}
-      {pendingItems.length > 0 && (
+      {pendingItems.length > 0 && (!q || visiblePending.length > 0) && (
         <Box sx={{ mb: 3 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, mb: 2, flexWrap: 'wrap' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, mb: compact ? 1 : 2, flexWrap: 'wrap' }}>
             {pendingSelectMode ? (
               <>
                 <Typography sx={{ ...NUM, fontSize: FS.body, fontWeight: 700, color: 'text.secondary' }}>
@@ -771,17 +933,13 @@ export default function ShoppingModePage() {
               </>
             )}
           </Box>
-          {visiblePending.length === 0 && (
-            <Typography sx={{ fontSize: FS.body, color: 'text.secondary', mb: 2 }}>
-              Ningún pendiente coincide con "{query.trim()}".
-            </Typography>
-          )}
           {visiblePending.map((item) => {
             const lock = getLockForItem(item.id)
             return (
               <BudgetItemCard
                 key={item.id}
                 item={item}
+                compact={compact}
                 lock={lock}
                 isLockedByMe={lock?.user_id === user?.id}
                 sessionId={session?.id}
@@ -798,7 +956,7 @@ export default function ShoppingModePage() {
       )}
 
       {/* ── Completed items from budget ── */}
-      {boughtBudgetItems.length > 0 && (
+      {!q && boughtBudgetItems.length > 0 && (
         <Box sx={{ mb: 3 }}>
           <Typography sx={{ fontSize: FS.meta, color: 'text.secondary', px: 1 }}>Ya comprados del presupuesto</Typography>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mt: 1 }}>
@@ -812,21 +970,8 @@ export default function ShoppingModePage() {
         </Box>
       )}
 
-      {/* Búsqueda sin el producto buscado: agregarlo directo con el nombre ya escrito */}
-      {q && (
-        <Button
-          fullWidth
-          variant="outlined"
-          startIcon={<Add />}
-          onClick={() => setAddItemDialog({ open: true, item: null, name: query.trim() })}
-          sx={{ mb: 3, justifyContent: 'flex-start' }}
-        >
-          Agregar "{query.trim()}" al carrito
-        </Button>
-      )}
-
       {/* Empty state */}
-      {pendingItems.length === 0 && purchaseItems.length === 0 && (
+      {!q && pendingItems.length === 0 && purchaseItems.length === 0 && (
         <EmptyState
           icon={<ShoppingCart sx={{ fontSize: 28 }} />}
           title="No hay items en el presupuesto."
@@ -834,32 +979,26 @@ export default function ShoppingModePage() {
         />
       )}
 
-      {/* ── FAB – add free item (secundario: la primaria es Finalizar compra) ── */}
-      <Fab
-        aria-label="Agregar producto"
-        size="medium"
-        onClick={() => setAddItemDialog({ open: true, item: null })}
-        sx={{
-          position: 'fixed', bottom: { xs: 168, md: 104 }, right: 20, zIndex: 16,
-          bgcolor: 'background.paper', color: 'primary.main', border: 1, borderColor: 'primary.main',
-          boxShadow: `0 8px 24px ${alpha(theme.palette.common.black, 0.18)}`,
-          '&:hover': { bgcolor: 'action.selected' },
-        }}
-      >
-        <Add />
-      </Fab>
-
-      {/* ── Bottom bar – complete (única acción primaria) ── */}
+      {/* ── Barra inferior fija: agregar producto (secundaria) + finalizar (única acción primaria) ── */}
       <Box
         sx={{
           position: 'fixed', bottom: { xs: 64, md: 0 }, left: barLeft, right: 0,
-          p: 2,
+          px: 2, py: 1.5,
           bgcolor: 'background.paper',
           borderTop: 1, borderColor: 'divider',
           zIndex: 15,
         }}
       >
-        <Box sx={{ maxWidth: 720, mx: 'auto' }}>
+        <Box sx={{ maxWidth: 720, mx: 'auto', display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          <Tooltip title="Agregar producto">
+            <IconButton
+              aria-label="Agregar producto"
+              onClick={() => setAddItemDialog({ open: true, item: null })}
+              sx={{ width: 52, height: 52, flexShrink: 0, border: 1, borderColor: 'primary.main', color: 'primary.main', '&:hover': { bgcolor: 'action.selected' } }}
+            >
+              <Add />
+            </IconButton>
+          </Tooltip>
           <Button
             fullWidth variant="contained" size="large"
             startIcon={completing ? <CircularProgress size={16} color="inherit" /> : <Done />}
@@ -944,6 +1083,7 @@ export default function ShoppingModePage() {
         open={addItemDialog.open}
         budgetItem={addItemDialog.item}
         initialName={addItemDialog.name}
+        initialProduct={addItemDialog.product}
         sessionId={session?.id}
         purchaseId={purchase?.id}
         userId={user?.id}

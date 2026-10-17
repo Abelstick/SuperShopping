@@ -24,7 +24,7 @@ const validators = {
 const FIELD_ORDER = ['product_name', 'quantity', 'unit_price']
 const NAME_ID = 'shopping-item-name'
 
-export default function AddItemDialog({ open, budgetItem, initialName, sessionId, purchaseId, userId, workspaceId, products, categories, onClose }) {
+export default function AddItemDialog({ open, budgetItem, initialName, initialProduct, sessionId, purchaseId, userId, workspaceId, products, categories, onClose }) {
   const theme = useTheme()
   const st = theme.palette.stock
   const { addPurchaseItem, unlockItem } = useShoppingStore()
@@ -44,13 +44,13 @@ export default function AddItemDialog({ open, budgetItem, initialName, sessionId
   useEffect(() => {
     if (open) {
       setForm({
-        product_name: budgetItem?.product_name ?? initialName ?? '',
-        product_id: budgetItem?.product_id ?? '',
+        product_name: budgetItem?.product_name ?? initialProduct?.name ?? initialName ?? '',
+        product_id: budgetItem?.product_id ?? initialProduct?.id ?? '',
         brand: '',
         quantity: budgetItem?.quantity ?? 1,
         unit_price: budgetItem?.estimated_price ?? '',
-        unit: budgetItem?.unit ?? 'unidad',
-        category_id: budgetItem?.category_id ?? '',
+        unit: budgetItem?.unit ?? initialProduct?.unit ?? 'unidad',
+        category_id: budgetItem?.category_id ?? initialProduct?.category_id ?? '',
         is_household: true,
       })
       setMultiplyQty(false)
@@ -58,7 +58,7 @@ export default function AddItemDialog({ open, budgetItem, initialName, sessionId
       setFieldErrors({})
       setMoreOpen(false)
     }
-  }, [open, budgetItem, initialName])
+  }, [open, budgetItem, initialName, initialProduct])
 
   // Fetch historical prices for this product, whether it came from the budget
   // item or was just picked from the inventory autocomplete below.

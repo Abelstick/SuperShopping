@@ -151,6 +151,26 @@ export const useShoppingStore = create((set, get) => ({
     return { data, error }
   },
 
+  // Cambia solo la cantidad con respuesta inmediata (el total del carrito sale de
+  // purchaseItems) y revierte si el servidor falla. Si el importe era "precio ×
+  // cantidad" se reescala; si era un total fijo, solo cambia la cantidad.
+  changePurchaseItemQuantity: async (id, quantity) => {
+    const prev = get().purchaseItems.find((i) => i.id === id)
+    if (!prev) return { error: new Error('Producto no encontrado') }
+    const unitPrice = prev.unit_price != null ? Number(prev.unit_price) : null
+    const perUnit = unitPrice != null && prev.total_price != null
+      && Math.abs(Number(prev.total_price) - unitPrice * Number(prev.quantity)) < 0.01
+    const patch = perUnit
+      ? { quantity, total_price: Math.round(unitPrice * quantity * 100) / 100 }
+      : { quantity }
+
+    const apply = (fields) => set((s) => ({ purchaseItems: s.purchaseItems.map((i) => i.id === id ? { ...i, ...fields } : i) }))
+    apply(patch)
+    const { error } = await supabase.from('purchase_items').update(patch).eq('id', id)
+    if (error) apply({ quantity: prev.quantity, total_price: prev.total_price })
+    return { error }
+  },
+
   removePurchaseItem: async (id) => {
     const { error } = await supabase.from('purchase_items').delete().eq('id', id)
     if (!error) set((s) => ({ purchaseItems: s.purchaseItems.filter((i) => i.id !== id) }))
