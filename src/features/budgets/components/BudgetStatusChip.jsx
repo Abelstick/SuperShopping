@@ -1,6 +1,5 @@
 import { Box, Typography, useTheme } from '@mui/material'
 import { CheckCircle, Block } from '@mui/icons-material'
-import { alpha } from '@mui/material/styles'
 
 // Un color = un significado: borrador neutro · activo índigo (marca) · completado verde (meta cumplida) · cancelado neutro
 const STATUS_LABELS = { draft: 'Borrador', active: 'Activo', completed: 'Completado', cancelled: 'Cancelado' }
@@ -9,10 +8,10 @@ export default function BudgetStatusChip({ status }) {
   const theme = useTheme()
   const known = STATUS_LABELS[status] ? status : 'draft'
   const skin = {
-    draft:     { bg: theme.palette.action.hover, fg: theme.palette.text.secondary, Icon: null },
-    active:    { bg: theme.palette.action.selected, fg: theme.palette.primary.main, Icon: null },
-    completed: { bg: alpha(theme.palette.success.main, 0.14), fg: theme.palette.success.main, Icon: CheckCircle },
-    cancelled: { bg: theme.palette.action.hover, fg: theme.palette.text.secondary, Icon: Block },
+    draft:     { bg: theme.vars.palette.action.hover, fg: theme.vars.palette.text.secondary, Icon: null },
+    active:    { bg: theme.vars.palette.action.selected, fg: theme.vars.palette.primary.main, Icon: null },
+    completed: { bg: theme.alpha(theme.vars.palette.success.main, 0.14), fg: theme.vars.palette.success.main, Icon: CheckCircle },
+    cancelled: { bg: theme.vars.palette.action.hover, fg: theme.vars.palette.text.secondary, Icon: Block },
   }[known]
 
   return (

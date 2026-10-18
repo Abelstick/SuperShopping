@@ -11,7 +11,7 @@ const FS = { title: 20, body: 15, meta: 13 }
 const validate = (v) => (v !== '' && Number(v) < 0 ? 'El total no puede ser negativo.' : '')
 
 export default function AdjustTotalDialog({ open, itemsSubtotal, initialTotal, saving, title, confirmLabel, onConfirm, onClose }) {
-  const st = useTheme().palette.stock
+  const st = useTheme().vars.palette.stock
   const [value, setValue] = useState('')
   const [error, setError] = useState('')
   const inputRef = useRef(null)

@@ -14,6 +14,13 @@
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon-180x180.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <title>SuperShopping</title>
+    <script>
+      // Aplica el tema guardado antes del primer pintado para evitar un parpadeo al cargar/recargar
+      try {
+        var s = JSON.parse(localStorage.getItem('app-settings'));
+        if (s && s.state && s.state.themeMode === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

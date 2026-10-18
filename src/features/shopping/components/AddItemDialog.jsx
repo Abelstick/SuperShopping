@@ -26,7 +26,7 @@ const NAME_ID = 'shopping-item-name'
 
 export default function AddItemDialog({ open, budgetItem, initialName, initialProduct, sessionId, purchaseId, userId, workspaceId, products, categories, onClose }) {
   const theme = useTheme()
-  const st = theme.palette.stock
+  const st = theme.vars.palette.stock
   const { addPurchaseItem, unlockItem } = useShoppingStore()
   const { enqueueSnackbar } = useSnackbar()
   const [form, setForm] = useState({
@@ -142,7 +142,7 @@ export default function AddItemDialog({ open, budgetItem, initialName, initialPr
   }
 
   // Más caro que lo habitual = coral; más barato = neutro con signo (no es un flujo positivo)
-  const hintColor = priceDiff > 15 ? st.agotado.text : theme.palette.text.secondary
+  const hintColor = priceDiff > 15 ? st.agotado.text : theme.vars.palette.text.secondary
   const HintIcon = priceDiff > 0 ? TrendingUp : TrendingDown
 
   return (

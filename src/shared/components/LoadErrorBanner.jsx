@@ -3,7 +3,7 @@ import { ErrorOutlined } from '@mui/icons-material'
 
 // Error de carga: causa concreta + Reintentar. Ámbar = advertencia (el rojo es solo para borrado).
 export default function LoadErrorBanner({ message, onRetry }) {
-  const st = useTheme().palette.stock
+  const st = useTheme().vars.palette.stock
   return (
     <Box
       role="alert"

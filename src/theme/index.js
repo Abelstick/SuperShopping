@@ -48,6 +48,8 @@ const tokens = {
     hover: 'rgba(15,23,42,0.05)',
     cardShadow: '0 1px 2px rgba(15,23,42,0.04)',
     overlayShadow: '0 16px 40px rgba(15,23,42,0.16)',
+    tooltipBg: '#0F172A',
+    tooltipInk: '#F8FAFC',
   },
   dark: {
     ground: '#020617',
@@ -80,6 +82,8 @@ const tokens = {
     hover: 'rgba(255,255,255,0.06)',
     cardShadow: 'none',
     overlayShadow: '0 16px 40px rgba(0,0,0,0.6)',
+    tooltipBg: '#F1F5F9',
+    tooltipInk: '#0F172A',
   },
 }
 
@@ -104,7 +108,9 @@ const EASE = 'cubic-bezier(0.22, 1, 0.36, 1)'
 const t = (props, ms = 140) => props.map(p => `${p} ${ms}ms ${EASE}`).join(', ')
 const MOBILE = '@media (max-width:1023.95px)'
 
-const components = (mode, c) => ({
+// `c` son referencias `var(--…)` a palette.system: el CSS se genera una sola vez y el
+// esquema activo cambia solo el valor de las variables, sin recalcular estilos en JS.
+const components = (c) => ({
   MuiCssBaseline: {
     styleOverrides: {
       '*': { boxSizing: 'border-box' },
@@ -291,11 +297,11 @@ const components = (mode, c) => ({
         borderRadius: RADIUS.control,
         fontSize: SIZE.meta,
         fontWeight: 600,
-        backgroundColor: mode === 'dark' ? '#F1F5F9' : '#0F172A',
-        color: mode === 'dark' ? '#0F172A' : '#F8FAFC',
+        backgroundColor: c.tooltipBg,
+        color: c.tooltipInk,
         padding: '8px 12px',
       },
-      arrow: { color: mode === 'dark' ? '#F1F5F9' : '#0F172A' },
+      arrow: { color: c.tooltipBg },
     },
   },
 
@@ -402,48 +408,61 @@ const components = (mode, c) => ({
   MuiToggleButtonGroup: { styleOverrides: { root: { gap: 4 } } },
 
   MuiSkeleton: {
-    styleOverrides: { root: { borderRadius: RADIUS.control, backgroundColor: mode === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(15,23,42,0.08)' } },
+    styleOverrides: { root: { borderRadius: RADIUS.control, backgroundColor: c.line } },
   },
 })
 
-const build = (mode) => {
+const palette = (mode) => {
   const c = tokens[mode]
-  return createTheme({
-    breakpoints: { values: { xs: 0, sm: 640, md: 1024, lg: 1280, xl: 1536 } },
-    palette: {
-      mode,
-      primary:   { main: c.brandText, light: c.brandLight, dark: c.brandHover, contrastText: mode === 'dark' ? '#0F172A' : '#FFFFFF' },
-      secondary: { main: mode === 'dark' ? '#94A3B8' : '#64748B', contrastText: mode === 'dark' ? '#0F172A' : '#FFFFFF' },
-      error:     { main: c.red, light: c.redText, dark: c.redHover, contrastText: '#FFFFFF' },
-      warning:   { main: c.amberText, light: '#F59E0B', dark: '#78350F', contrastText: '#FFFFFF' },
-      success:   { main: c.greenText, light: '#34D399', dark: '#047857', contrastText: '#FFFFFF' },
-      info:      { main: c.brandText, contrastText: mode === 'dark' ? '#0F172A' : '#FFFFFF' },
-      background: { default: c.ground, paper: c.surface },
-      text: { primary: c.ink, secondary: c.inkMuted, disabled: c.inkDisabled },
-      divider: c.line,
-      action: {
-        hover: c.hover,
-        selected: c.brandTint,
-        disabled: mode === 'dark' ? 'rgba(255,255,255,0.38)' : 'rgba(15,23,42,0.38)',
-        disabledBackground: c.line,
-      },
-      // Tokens semánticos del dominio: estado del stock de la despensa.
-      // Sin verde: el verde es solo para flujos positivos.
-      stock: {
-        agotado:   { text: c.coralText, icon: c.coralIcon, tint: c.coralTint, line: c.coralLine },
-        riesgo:    { text: c.amberText, icon: c.amberIcon, tint: c.amberTint, line: c.amberLine },
-        saludable: { text: c.ink, icon: c.inkMuted, tint: c.surfaceAlt, line: c.line },
-      },
-      // Tokens de sistema usados por pantallas
-      system: { brand: c.brand, brandTint: c.brandTint, lineStrong: c.lineStrong, surfaceAlt: c.surfaceAlt, positive: c.greenText },
+  const dark = mode === 'dark'
+  return {
+    primary:   { main: c.brandText, light: c.brandLight, dark: c.brandHover, contrastText: dark ? '#0F172A' : '#FFFFFF' },
+    secondary: { main: dark ? '#94A3B8' : '#64748B', contrastText: dark ? '#0F172A' : '#FFFFFF' },
+    error:     { main: c.red, light: c.redText, dark: c.redHover, contrastText: '#FFFFFF' },
+    warning:   { main: c.amberText, light: '#F59E0B', dark: '#78350F', contrastText: '#FFFFFF' },
+    success:   { main: c.greenText, light: '#34D399', dark: '#047857', contrastText: '#FFFFFF' },
+    info:      { main: c.brandText, contrastText: dark ? '#0F172A' : '#FFFFFF' },
+    background: { default: c.ground, paper: c.surface },
+    text: { primary: c.ink, secondary: c.inkMuted, disabled: c.inkDisabled },
+    divider: c.line,
+    // Con variables CSS MUI aplica estos valores por esquema (más específicos que styleOverrides)
+    AppBar: { defaultBg: c.bar, darkBg: c.bar, darkColor: c.ink },
+    action: {
+      hover: c.hover,
+      selected: c.brandTint,
+      disabled: dark ? 'rgba(255,255,255,0.38)' : 'rgba(15,23,42,0.38)',
+      disabledBackground: c.line,
     },
-    typography,
-    shape: { borderRadius: RADIUS.control },
-    components: components(mode, c),
-  })
+    // Tokens semánticos del dominio: estado del stock de la despensa.
+    // Sin verde: el verde es solo para flujos positivos.
+    stock: {
+      agotado:   { text: c.coralText, icon: c.coralIcon, tint: c.coralTint, line: c.coralLine },
+      riesgo:    { text: c.amberText, icon: c.amberIcon, tint: c.amberTint, line: c.amberLine },
+      saludable: { text: c.ink, icon: c.inkMuted, tint: c.surfaceAlt, line: c.line },
+    },
+    // Tokens de sistema: todo el tema los referencia como variables CSS (ver `components`)
+    system: { ...c, positive: c.greenText },
+  }
 }
 
-export const theme = build('light')
-export const darkTheme = build('dark')
+// Un único tema con dos esquemas. Con `cssVariables`, MUI emite cada esquema como variables CSS
+// (`:root` para el claro, `[data-theme="dark"]` para el oscuro) y el objeto del tema no cambia al
+// alternar: cambiar de modo es cambiar un atributo en <html>, sin volver a generar estilos.
+// Los colores en JS deben leerse de `theme.vars.palette` (referencias `var(--…)`), no de `theme.palette`.
+const options = {
+  cssVariables: { colorSchemeSelector: 'data-theme' },
+  breakpoints: { values: { xs: 0, sm: 640, md: 1024, lg: 1280, xl: 1536 } },
+  colorSchemes: {
+    light: { palette: palette('light') },
+    dark: { palette: palette('dark') },
+  },
+  typography,
+  shape: { borderRadius: RADIUS.control },
+}
+
+// Primera pasada solo para obtener `vars` (las referencias var(--…)) con las que se escriben los overrides
+const { vars } = createTheme(options)
+
+export const theme = createTheme({ ...options, components: components(vars.palette.system) })
 
 export const motion = { ease: EASE, fast: 140, base: 240 }

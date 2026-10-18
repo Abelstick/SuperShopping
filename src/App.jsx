@@ -1,18 +1,17 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect } from 'react'
 import { RouterProvider } from 'react-router-dom'
 import { ThemeProvider } from '@mui/material/styles'
 import { CssBaseline } from '@mui/material'
 import { SnackbarProvider } from 'notistack'
 import { router } from './routes'
-import { theme, darkTheme } from './theme'
+import { theme } from './theme'
 import { useAuthStore } from './features/auth/store/authStore'
 import { useAppStore } from './store/appStore'
 import PWAUpdateBanner from './shared/components/PWAUpdateBanner'
 
 export default function App() {
   const { initialize, refreshSession } = useAuthStore()
-  const { themeMode, bumpRefreshSignal } = useAppStore()
-  const activeTheme = useMemo(() => (themeMode === 'dark' ? darkTheme : theme), [themeMode])
+  const bumpRefreshSignal = useAppStore((s) => s.bumpRefreshSignal)
 
   useEffect(() => {
     let unsub = null
@@ -39,7 +38,8 @@ export default function App() {
   }, [])
 
   return (
-    <ThemeProvider theme={activeTheme}>
+    // El modo lo gobierna appStore + bindThemeModeToDocument: MUI no guarda ni escribe el esquema
+    <ThemeProvider theme={theme} colorSchemeNode={null} storageManager={null} noSsr>
       <CssBaseline />
       <SnackbarProvider
         maxSnack={3}

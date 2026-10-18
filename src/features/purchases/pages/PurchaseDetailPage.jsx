@@ -33,7 +33,7 @@ function KpiCard({ icon, label, value }) {
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function PurchaseDetailPage() {
   const theme = useTheme()
-  const st = theme.palette.stock.saludable
+  const st = theme.vars.palette.stock.saludable
   const { purchaseId } = useParams()
   const navigate = useNavigate()
   const { currentWorkspace } = useWorkspaceStore()

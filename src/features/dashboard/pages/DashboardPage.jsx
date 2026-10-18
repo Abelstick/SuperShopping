@@ -52,8 +52,8 @@ function PanelHeader({ title, caption, children }) {
 
 function KpiCard({ icon, label, value, sub, loading, trendIcon }) {
   const theme = useTheme()
-  const st = theme.palette.stock
-  const subColor = sub?.negative ? st.agotado.text : theme.palette.text.secondary
+  const st = theme.vars.palette.stock
+  const subColor = sub?.negative ? st.agotado.text : theme.vars.palette.text.secondary
   return (
     <Card sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'text.secondary' }}>
@@ -132,7 +132,7 @@ function InsightCard({ icon, title, value, sub, color, loading, empty }) {
 // El dato hero: cuántos productos piden reposición. Estado = tono + icono + texto.
 function StockHero({ loading, unknown, count, lowCount, riskCount, primaryIsBudgets, onGo }) {
   const theme = useTheme()
-  const st = theme.palette.stock
+  const st = theme.vars.palette.stock
   const tone = unknown ? 'desconocido' : count === 0 ? 'saludable' : lowCount > 0 ? 'agotado' : 'riesgo'
   const skin = {
     desconocido: { ...st.saludable, Icon: ErrorOutlined },
@@ -210,7 +210,7 @@ function NameList({ names }) {
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function DashboardPage() {
   const theme = useTheme()
-  const st = theme.palette.stock
+  const st = theme.vars.palette.stock
   const navigate = useNavigate()
   const { enqueueSnackbar } = useSnackbar()
   const reduceMotion = useMediaQuery('(prefers-reduced-motion: reduce)')
@@ -219,7 +219,7 @@ export default function DashboardPage() {
   const { products, fetchProducts, fetchCategories, deactivateProducts, loading: invLoading } = useInventoryStore()
   const { budgets, fetchBudgets, loading: budgLoading } = useBudgetStore()
   const { purchases, fetchPurchases, deletePurchases, getSpendingByUser, getMonthlySpending, loading: purchLoading } = usePurchaseStore()
-  const { refreshSignal } = useAppStore()
+  const refreshSignal = useAppStore((s) => s.refreshSignal)
 
   // ── Selection state
   const [purchSelectMode, setPurchSelectMode]       = useState(false)
@@ -335,7 +335,7 @@ export default function DashboardPage() {
 
   const hasChartData = monthlyData.length > 0
   const hasUserData  = spendingByUser.length > 0
-  const primaryColor = theme.palette.primary.main
+  const primaryColor = theme.vars.palette.primary.main
   const loading      = invLoading || budgLoading || purchLoading
 
   // Estado por dato (skeleton solo mientras no hay nada que mostrar en listas y gráficos)
@@ -352,7 +352,7 @@ export default function DashboardPage() {
   }, [])
 
   // Tendencia: bajar el gasto es neutro; subir hasta 15% avisa (ámbar); más de 15% es exceso (coral)
-  const trendColor = spendTrend === null || spendTrend <= 0 ? theme.palette.text.primary
+  const trendColor = spendTrend === null || spendTrend <= 0 ? theme.vars.palette.text.primary
     : spendTrend <= 15 ? st.riesgo.text : st.agotado.text
   const TrendIcon = spendTrend !== null && spendTrend < 0 ? TrendingDown : TrendingUp
 
@@ -477,7 +477,7 @@ export default function DashboardPage() {
                           onClick={e => { e.stopPropagation(); toggleStockSelect(p.id) }}
                           inputProps={{ 'aria-label': `Seleccionar producto ${p.name}` }} />
                       )}
-                      <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: p.categories?.color || theme.palette.text.disabled, flexShrink: 0 }} />
+                      <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: p.categories?.color || theme.vars.palette.text.disabled, flexShrink: 0 }} />
                       <ListItemText
                         sx={{ my: 0, minWidth: 0 }}
                         primary={<Typography sx={{ fontSize: FS.body, fontWeight: 700 }} noWrap>{p.name}</Typography>}
@@ -533,13 +533,13 @@ export default function DashboardPage() {
                             <stop offset="95%" stopColor={primaryColor} stopOpacity={0.02} />
                           </linearGradient>
                         </defs>
-                        <CartesianGrid strokeDasharray="2 4" stroke={theme.palette.divider} vertical={false} />
-                        <XAxis dataKey="month" tickMargin={8} tickFormatter={fmtMonth} tick={{ fontSize: FS.meta, fill: theme.palette.text.secondary }} tickLine={false} axisLine={false} />
-                        <YAxis width={72} tick={{ fontSize: FS.meta, fill: theme.palette.text.secondary }} tickLine={false} axisLine={false} tickFormatter={v => `S/ ${Number(v).toLocaleString('en-US')}`} />
+                        <CartesianGrid strokeDasharray="2 4" stroke={theme.vars.palette.divider} vertical={false} />
+                        <XAxis dataKey="month" tickMargin={8} tickFormatter={fmtMonth} tick={{ fontSize: FS.meta, fill: theme.vars.palette.text.secondary }} tickLine={false} axisLine={false} />
+                        <YAxis width={72} tick={{ fontSize: FS.meta, fill: theme.vars.palette.text.secondary }} tickLine={false} axisLine={false} tickFormatter={v => `S/ ${Number(v).toLocaleString('en-US')}`} />
                         <RechartTooltip content={<ChartTooltip />} cursor={{ stroke: primaryColor, strokeWidth: 1, strokeDasharray: '4 4' }} />
                         <Area type="monotone" dataKey="total" stroke={primaryColor} strokeWidth={2} fill="url(#spendGrad)" dot={false}
                           isAnimationActive={!reduceMotion} animationDuration={240}
-                          activeDot={{ r: 5, fill: primaryColor, stroke: theme.palette.background.paper, strokeWidth: 2 }} />
+                          activeDot={{ r: 5, fill: primaryColor, stroke: theme.vars.palette.background.paper, strokeWidth: 2 }} />
                       </AreaChart>
                     </ResponsiveContainer>
                   </Box>

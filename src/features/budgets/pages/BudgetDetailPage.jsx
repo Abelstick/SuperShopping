@@ -186,7 +186,7 @@ function BudgetItemForm({ open, item, budgetId, categories, products, budgetItem
 
   const submitLabel = isEdit ? 'Guardar cambios' : 'Agregar item'
   const selectedCategory = categories.find((c) => c.id === form.category_id)
-  const st = theme.palette.stock
+  const st = theme.vars.palette.stock
 
   return (
     <Dialog open={open} onClose={saving ? undefined : onClose} maxWidth="sm" fullWidth>
@@ -382,7 +382,7 @@ function BudgetItemForm({ open, item, budgetId, categories, products, budgetItem
 
 // ── Hero: estimado vs. presupuesto ───────────────────────────────────────────
 function EstimateHero({ total, target, over, progress }) {
-  const st = useTheme().palette.stock
+  const st = useTheme().vars.palette.stock
   const skin = over ? st.agotado : st.saludable
   const Icon = over ? ErrorOutlined : Receipt
   return (

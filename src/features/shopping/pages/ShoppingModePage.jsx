@@ -83,7 +83,7 @@ function SummaryStat({ label, value }) {
 // ── Budget Item Card ─────────────────────────────────────────────────────────
 function BudgetItemCard({ item, lock, isLockedByMe, sessionId, userId, alreadyBought, onAddItem, selectMode, selected, onToggleSelect, compact }) {
   const theme = useTheme()
-  const st = theme.palette.stock
+  const st = theme.vars.palette.stock
   const { lockItem, unlockItem } = useShoppingStore()
   const { enqueueSnackbar } = useSnackbar()
   const isLocked = Boolean(lock)
@@ -102,7 +102,7 @@ function BudgetItemCard({ item, lock, isLockedByMe, sessionId, userId, alreadyBo
 
   const lockTitle = isLockedByMe ? 'Liberar' : isLocked ? 'Reservado por otro' : 'Reservar para mí'
   const addTitle = canInteract ? 'Agregar al carrito' : 'Reservado'
-  const dotColor = item.categories?.color || theme.palette.text.disabled
+  const dotColor = item.categories?.color || theme.vars.palette.text.disabled
   // Vista compacta: cantidad, precio y categoría en una sola línea de texto
   const metaLine = [
     `${item.quantity} ${item.unit}`,
@@ -322,11 +322,11 @@ export default function ShoppingModePage() {
   const budgetId = searchParams.get('budgetId')
   const navigate = useNavigate()
   const theme = useTheme()
-  const st = theme.palette.stock
+  const st = theme.vars.palette.stock
 
   const { user } = useAuthStore()
   const { currentWorkspace } = useWorkspaceStore()
-  const { sidebarOpen } = useAppStore()
+  const sidebarOpen = useAppStore((s) => s.sidebarOpen)
   const { currentBudget, budgetItems, fetchBudgetWithItems, updateBudget } = useBudgetStore()
   const { products, categories, fetchProducts, fetchCategories } = useInventoryStore()
   const {
@@ -645,7 +645,7 @@ export default function ShoppingModePage() {
   const heroValue = hasBudget ? (overBudget ? -Math.abs(diff) : diff) : totalSpent
   const heroSkin = overBudget ? st.agotado : st.saludable
   const HeroIcon = overBudget ? ErrorOutlined : Receipt
-  const progressColor = overBudget ? st.agotado.icon : progress > 80 ? st.riesgo.icon : theme.palette.primary.main
+  const progressColor = overBudget ? st.agotado.icon : progress > 80 ? st.riesgo.icon : theme.vars.palette.primary.main
   const boughtNames = purchaseItems.filter((i) => boughtSelectedIds.has(i.id)).map((i) => i.product_name)
   const barLeft = { xs: 0, md: sidebarOpen ? DRAWER_WIDTH : 0 }
   const summaryToggleLabel = headerCompact ? 'Ampliar resumen del gasto' : 'Reducir resumen del gasto'
@@ -693,7 +693,7 @@ export default function ShoppingModePage() {
               )}
             </Box>
           </Box>
-          <AvatarGroup max={3} sx={{ flexShrink: 0, '& .MuiAvatar-root': { width: 32, height: 32, fontSize: FS.meta, border: `2px solid ${theme.palette.background.default}` } }}>
+          <AvatarGroup max={3} sx={{ flexShrink: 0, '& .MuiAvatar-root': { width: 32, height: 32, fontSize: FS.meta, border: `2px solid ${theme.vars.palette.background.default}` } }}>
             {participants.map((p) => (
               <Tooltip key={p.id} title={p.profiles?.full_name ?? ''}>
                 <Avatar src={p.profiles?.avatar_url} alt={p.profiles?.full_name ?? ''} sx={{ bgcolor: 'primary.main', color: 'primary.contrastText' }}>

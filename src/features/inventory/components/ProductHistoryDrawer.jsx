@@ -12,7 +12,7 @@ const fmtDateTime = (d) => new Date(d).toLocaleString('es-AR', { day: '2-digit',
 
 export default function ProductHistoryDrawer({ open, product, onClose }) {
   const theme = useTheme()
-  const st = theme.palette.stock
+  const st = theme.vars.palette.stock
   const { history, fetchProductHistory } = useInventoryStore()
   // Qué producto ya cargó (y con qué error): evita mostrar el historial de otro producto
   const [result, setResult] = useState({ id: null, error: null })

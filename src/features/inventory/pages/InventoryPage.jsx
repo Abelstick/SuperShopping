@@ -97,7 +97,7 @@ function ProductMenu({ product, onEdit, onHistory, onDeactivate, onReactivate, o
 // ── Hero: productos con stock bajo (o, si no hay, productos activos) ─────────
 function InventoryHero({ loading, lowCount, activeCount }) {
   const theme = useTheme()
-  const st = theme.palette.stock
+  const st = theme.vars.palette.stock
   const low = lowCount > 0
   const skin = low ? st.agotado : st.saludable
   const Icon = low ? ErrorOutlined : Inventory2
@@ -134,8 +134,8 @@ function InventoryHero({ loading, lowCount, activeCount }) {
 // ── Product Card ─────────────────────────────────────────────────────────────
 function ProductCard({ product, isEditor, onEdit, onDeactivate, onReactivate, onDelete, onHistory }) {
   const theme = useTheme()
-  const st = theme.palette.stock
-  const catColor = product.categories?.color || theme.palette.text.disabled
+  const st = theme.vars.palette.stock
+  const catColor = product.categories?.color || theme.vars.palette.text.disabled
   const stockPct = product.min_quantity > 0
     ? Math.min((product.current_quantity / (product.min_quantity * 3)) * 100, 100)
     : 100
@@ -193,8 +193,8 @@ function ProductCard({ product, isEditor, onEdit, onDeactivate, onReactivate, on
 // ── Product Row ───────────────────────────────────────────────────────────────
 function ProductRow({ product, isEditor, divider, onEdit, onDeactivate, onReactivate, onDelete, onHistory }) {
   const theme = useTheme()
-  const st = theme.palette.stock
-  const catColor = product.categories?.color || theme.palette.text.disabled
+  const st = theme.vars.palette.stock
+  const catColor = product.categories?.color || theme.vars.palette.text.disabled
   const isLow = isLowStock(product)
 
   return (
@@ -276,7 +276,7 @@ export default function InventoryPage() {
     products, categories, loading, filters, setFilters,
     fetchProducts, fetchCategories, deleteProduct, hardDeleteProduct, updateProduct, getFilteredProducts,
   } = useInventoryStore()
-  const { refreshSignal } = useAppStore()
+  const refreshSignal = useAppStore((s) => s.refreshSignal)
   const { enqueueSnackbar } = useSnackbar()
   const [view, setView] = useState('grid')
   const [tab, setTab] = useState(0)
@@ -521,7 +521,7 @@ export default function InventoryPage() {
       <Dialog open={Boolean(deactivateConfirm)} onClose={deactivating ? undefined : () => setDeactivateConfirm(null)} maxWidth="xs" fullWidth>
         <DialogTitle>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <Box sx={{ p: 1, bgcolor: theme.palette.stock.riesgo.tint, border: 1, borderColor: theme.palette.stock.riesgo.line, borderRadius: '8px', color: theme.palette.stock.riesgo.icon, display: 'flex' }}>
+            <Box sx={{ p: 1, bgcolor: theme.vars.palette.stock.riesgo.tint, border: 1, borderColor: theme.vars.palette.stock.riesgo.line, borderRadius: '8px', color: theme.vars.palette.stock.riesgo.icon, display: 'flex' }}>
               <VisibilityOff sx={{ fontSize: 24 }} />
             </Box>
             <Box>

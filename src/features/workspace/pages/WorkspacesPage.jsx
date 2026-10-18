@@ -32,7 +32,7 @@ function OwnerLine({ workspace }) {
 
 // ── Nivel 1: el hogar activo es la identidad principal de la pantalla ───────
 function CurrentWorkspaceHero({ workspace }) {
-  const st = useTheme().palette.stock.saludable
+  const st = useTheme().vars.palette.stock.saludable
   return (
     <Card sx={{ bgcolor: st.tint, borderColor: st.line, p: 3, display: 'flex', alignItems: 'flex-start', gap: 2 }}>
       <Box sx={{ width: 48, height: 48, borderRadius: '12px', bgcolor: 'primary.main', color: 'primary.contrastText', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>

@@ -3,6 +3,10 @@ import { createRoot } from 'react-dom/client'
 import '@fontsource-variable/roboto-flex/wght.css'
 import './index.css'
 import App from './App.jsx'
+import { useAppStore } from './store/appStore'
+import { bindThemeModeToDocument } from './theme/applyThemeMode'
+
+bindThemeModeToDocument(useAppStore)
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>

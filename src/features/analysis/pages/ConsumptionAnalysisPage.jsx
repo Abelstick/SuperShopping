@@ -3,7 +3,6 @@ import {
   Box, Card, Typography, Skeleton, Button,
   ToggleButton, ToggleButtonGroup, useTheme,
 } from '@mui/material'
-import { alpha } from '@mui/material/styles'
 import {
   TrendingUp, Repeat, Category as CategoryIcon, PriceChange,
   ShoppingBasket, Warning, Schedule, EventBusy,
@@ -69,7 +68,7 @@ function Panel({ title, caption, icon, children, sx }) {
 }
 
 function KpiCard({ icon, label, value, sub, subTone }) {
-  const st = useTheme().palette.stock
+  const st = useTheme().vars.palette.stock
   const subColor = subTone ? st[subTone].text : undefined
   return (
     <Card sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
@@ -103,12 +102,12 @@ function RankBar({ name, value, max, formattedValue, color }) {
 // Chip de estado: tono + icono + texto (nunca solo color)
 function ToneChip({ tone, Icon, label }) {
   const theme = useTheme()
-  const st = theme.palette.stock
+  const st = theme.vars.palette.stock
   const skin = {
     agotado: { bg: st.agotado.tint, fg: st.agotado.text, border: st.agotado.line, icon: st.agotado.icon },
     riesgo: { bg: st.riesgo.tint, fg: st.riesgo.text, border: st.riesgo.line, icon: st.riesgo.icon },
-    brand: { bg: theme.palette.action.selected, fg: theme.palette.primary.main, border: 'transparent', icon: theme.palette.primary.main },
-    neutral: { bg: theme.palette.action.hover, fg: theme.palette.text.primary, border: 'transparent', icon: theme.palette.text.secondary },
+    brand: { bg: theme.vars.palette.action.selected, fg: theme.vars.palette.primary.main, border: 'transparent', icon: theme.vars.palette.primary.main },
+    neutral: { bg: theme.vars.palette.action.hover, fg: theme.vars.palette.text.primary, border: 'transparent', icon: theme.vars.palette.text.secondary },
   }[tone]
   return (
     <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, px: 1, py: 0.5, borderRadius: '8px', bgcolor: skin.bg, border: 1, borderColor: skin.border, color: skin.fg }}>
@@ -143,7 +142,7 @@ const NO_DATA = <Typography sx={{ fontSize: FS.body, color: 'text.secondary' }}>
 // ── Page ─────────────────────────────────────────────────────────────────────
 export default function ConsumptionAnalysisPage() {
   const theme = useTheme()
-  const st = theme.palette.stock
+  const st = theme.vars.palette.stock
   const { currentWorkspace } = useWorkspaceStore()
   const { allItems, fetchAllItems, loading } = usePurchaseStore()
   const [period, setPeriod] = useState(PERIODS[2]) // 12 meses por defecto
@@ -220,7 +219,7 @@ export default function ConsumptionAnalysisPage() {
     const totals = new Map()
     filteredItems.forEach((i) => {
       const name = i.categories?.name || 'Sin categoría'
-      const color = i.categories?.color || theme.palette.text.disabled
+      const color = i.categories?.color || theme.vars.palette.text.disabled
       if (!totals.has(name)) totals.set(name, { name, color, total: 0 })
       totals.get(name).total += i.total_price || 0
     })
@@ -240,7 +239,7 @@ export default function ConsumptionAnalysisPage() {
     const months = Object.keys(byMonth).sort().slice(-8)
     const chartCategories = [...top]
     const othersTotal = ranked.slice(6).reduce((a, c) => a + c.total, 0)
-    if (othersTotal > 0) chartCategories.push({ name: 'Otras', color: theme.palette.text.disabled, total: othersTotal })
+    if (othersTotal > 0) chartCategories.push({ name: 'Otras', color: theme.vars.palette.text.disabled, total: othersTotal })
 
     return { ranked: top, chartData: months.map((m) => byMonth[m]), chartCategories }
   }, [filteredItems, theme])
@@ -353,7 +352,7 @@ export default function ConsumptionAnalysisPage() {
                     <RankBar
                       key={p.key} name={p.name} value={p.count} max={maxCount}
                       formattedValue={`${p.count} compra${p.count !== 1 ? 's' : ''}`}
-                      color={theme.palette.primary.main}
+                      color={theme.vars.palette.primary.main}
                     />
                   ))}
                 </Box>
@@ -366,7 +365,7 @@ export default function ConsumptionAnalysisPage() {
                     <RankBar
                       key={p.key} name={p.name} value={p.spend} max={maxSpend}
                       formattedValue={fmtMoney(p.spend)}
-                      color={theme.palette.primary.main}
+                      color={theme.vars.palette.primary.main}
                     />
                   ))}
                 </Box>
@@ -408,10 +407,10 @@ export default function ConsumptionAnalysisPage() {
                   <Box role="img" aria-label={chartSummary}>
                     <ResponsiveContainer width="100%" height={240}>
                       <BarChart data={categoryData.chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-                        <CartesianGrid strokeDasharray="2 4" stroke={theme.palette.divider} vertical={false} />
-                        <XAxis dataKey="month" tickMargin={8} tickFormatter={fmtMonth} tick={{ fontSize: FS.meta, fill: theme.palette.text.secondary }} tickLine={false} axisLine={false} />
-                        <YAxis width={72} tick={{ fontSize: FS.meta, fill: theme.palette.text.secondary }} tickLine={false} axisLine={false} tickFormatter={(v) => `S/ ${Number(v).toLocaleString('en-US')}`} />
-                        <RechartTooltip content={<ChartTooltip />} cursor={{ fill: alpha(theme.palette.text.primary, 0.04) }} />
+                        <CartesianGrid strokeDasharray="2 4" stroke={theme.vars.palette.divider} vertical={false} />
+                        <XAxis dataKey="month" tickMargin={8} tickFormatter={fmtMonth} tick={{ fontSize: FS.meta, fill: theme.vars.palette.text.secondary }} tickLine={false} axisLine={false} />
+                        <YAxis width={72} tick={{ fontSize: FS.meta, fill: theme.vars.palette.text.secondary }} tickLine={false} axisLine={false} tickFormatter={(v) => `S/ ${Number(v).toLocaleString('en-US')}`} />
+                        <RechartTooltip content={<ChartTooltip />} cursor={{ fill: theme.alpha(theme.vars.palette.text.primary, 0.04) }} />
                         {categoryData.chartCategories.map((c) => (
                           <Bar key={c.name} dataKey={c.name} stackId="cat" fill={c.color} radius={[0, 0, 0, 0]} isAnimationActive={false} />
                         ))}

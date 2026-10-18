@@ -8,12 +8,13 @@ import {
 } from '@mui/material'
 import {
   Menu as MenuIcon, Dashboard, Inventory2, Receipt, ShoppingCart,
-  Home, Logout, Person, ChevronLeft, DarkMode, LightMode,
+  Home, Logout, Person, ChevronLeft,
   MoreHoriz, Settings, ShoppingCartCheckout, Insights,
 } from '@mui/icons-material'
 import { useAuthStore } from '@/features/auth/store/authStore'
 import { useWorkspaceStore } from '@/features/workspace/store/workspaceStore'
 import { useAppStore } from '@/store/appStore'
+import ThemeToggle from '@/shared/components/ThemeToggle'
 
 const DRAWER_WIDTH = 252
 
@@ -77,7 +78,8 @@ export default function AppLayout() {
     if (user) fetchWorkspaces(user.id)
   }, [user?.id])
 
-  const { sidebarOpen, toggleSidebar, themeMode, toggleTheme } = useAppStore()
+  const sidebarOpen = useAppStore((s) => s.sidebarOpen)
+  const toggleSidebar = useAppStore((s) => s.toggleSidebar)
   const [userMenuAnchor, setUserMenuAnchor] = useState(null)
 
   const activeBottomNav = BOTTOM_NAV.findIndex(
@@ -322,14 +324,7 @@ export default function AppLayout() {
 
           <Box sx={{ flexGrow: 1 }} />
 
-          <Tooltip title={themeMode === 'dark' ? 'Modo claro' : 'Modo oscuro'}>
-            <IconButton onClick={toggleTheme} size="small">
-              {themeMode === 'dark'
-                ? <LightMode sx={{ fontSize: 19 }} />
-                : <DarkMode sx={{ fontSize: 19 }} />
-              }
-            </IconButton>
-          </Tooltip>
+          <ThemeToggle />
 
           <IconButton
             size="small"

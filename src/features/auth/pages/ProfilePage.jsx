@@ -12,7 +12,7 @@ const FS = { hero: 48, heroXs: 36, title: 20, body: 15, meta: 13 }
 const reveal = (i) => ({ className: 'reveal', style: { '--i': i } })
 
 export default function ProfilePage() {
-  const st = useTheme().palette.stock.saludable
+  const st = useTheme().vars.palette.stock.saludable
   const { user, profile, updateProfile } = useAuthStore()
   const { enqueueSnackbar } = useSnackbar()
   // Borrador: mientras no se edite, el campo muestra el nombre del perfil (aunque llegue después)

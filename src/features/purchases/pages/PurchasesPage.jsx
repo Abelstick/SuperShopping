@@ -57,7 +57,7 @@ function groupByMonth(purchases) {
 
 // ── Nivel 1: dato hero ───────────────────────────────────────────────────────
 function TotalHero({ total }) {
-  const st = useTheme().palette.stock.saludable
+  const st = useTheme().vars.palette.stock.saludable
   return (
     <Card sx={{ bgcolor: st.tint, borderColor: st.line, p: 3, display: 'flex', alignItems: 'center', gap: 2 }}>
       <Receipt sx={{ fontSize: 32, color: st.icon }} />
@@ -71,7 +71,7 @@ function TotalHero({ total }) {
 
 // ── Fila de compra ───────────────────────────────────────────────────────────
 function PurchaseRow({ purchase, isOwner, onView, onDelete }) {
-  const st = useTheme().palette.stock.riesgo
+  const st = useTheme().vars.palette.stock.riesgo
   const openOnKey = (e) => {
     if (e.target !== e.currentTarget) return
     if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onView() }
@@ -146,7 +146,7 @@ export default function PurchasesPage() {
   const navigate = useNavigate()
   const { currentWorkspace } = useWorkspaceStore()
   const { purchases, loading, fetchPurchases, deletePurchase } = usePurchaseStore()
-  const { refreshSignal } = useAppStore()
+  const refreshSignal = useAppStore((s) => s.refreshSignal)
   const { enqueueSnackbar } = useSnackbar()
   const [deleteConfirm, setDeleteConfirm] = useState(null)
   const [deleting, setDeleting] = useState(false)

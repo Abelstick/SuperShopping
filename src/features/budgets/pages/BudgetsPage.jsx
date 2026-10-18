@@ -33,7 +33,7 @@ const reveal = (i) => ({ className: 'reveal', style: { '--i': i } })
 // ── Nivel 1: dato hero ───────────────────────────────────────────────────────
 // Total restante: déficit = coral con signo; el resto es neutro (el verde es solo para flujos positivos)
 function RemainingHero({ remaining }) {
-  const st = useTheme().palette.stock
+  const st = useTheme().vars.palette.stock
   const over = remaining < 0
   const skin = over ? st.agotado : st.saludable
   const Icon = over ? ErrorOutlined : Receipt
@@ -54,7 +54,7 @@ function RemainingHero({ remaining }) {
 }
 
 function KpiCard({ label, value, sub, tone }) {
-  const st = useTheme().palette.stock
+  const st = useTheme().vars.palette.stock
   return (
     <Card sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
       <Typography sx={{ fontSize: FS.body, color: 'text.secondary' }}>{label}</Typography>
@@ -67,7 +67,7 @@ function KpiCard({ label, value, sub, tone }) {
 // ── Patrones de consumo ──────────────────────────────────────────────────────
 function ConsumptionChart({ purchases }) {
   const theme = useTheme()
-  const st = theme.palette.stock
+  const st = theme.vars.palette.stock
   const months = useMemo(() => {
     const byMonth = {}
     purchases.forEach((p) => {
@@ -90,7 +90,7 @@ function ConsumptionChart({ purchases }) {
 
   // Subir el gasto avisa en coral; bajar es neutro (no es un flujo positivo)
   const TrendIcon = diff === null ? TrendingFlat : diff > 0 ? TrendingUp : TrendingDown
-  const trendColor = diff !== null && diff > 0 ? st.agotado.text : theme.palette.text.secondary
+  const trendColor = diff !== null && diff > 0 ? st.agotado.text : theme.vars.palette.text.secondary
   const summary = `Patrones de consumo: ${months.map((m) => `${m.label} ${fmtMoney(m.total)}`).join(', ')}`
 
   return (
@@ -139,7 +139,7 @@ function ConsumptionChart({ purchases }) {
 
 // ── Tarjeta de presupuesto ───────────────────────────────────────────────────
 function AlertBadge({ tone, Icon, label, tooltip }) {
-  const st = useTheme().palette.stock[tone]
+  const st = useTheme().vars.palette.stock[tone]
   return (
     <Tooltip title={tooltip}>
       <Box tabIndex={0} sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, px: 1, py: 0.5, borderRadius: '8px', bgcolor: st.tint, border: 1, borderColor: st.line, color: st.text }}>
@@ -151,7 +151,7 @@ function AlertBadge({ tone, Icon, label, tooltip }) {
 }
 
 function BudgetCard({ budget, isEditor, onEdit, onDelete, onActivate, onDuplicate, onOpen, spentAmount }) {
-  const st = useTheme().palette.stock
+  const st = useTheme().vars.palette.stock
   const [anchorEl, setAnchorEl] = useState(null)
   const close = () => setAnchorEl(null)
 
@@ -284,13 +284,13 @@ const GRID = { display: 'grid', gap: 2, gridTemplateColumns: 'repeat(auto-fill, 
 
 export default function BudgetsPage() {
   const theme = useTheme()
-  const st = theme.palette.stock
+  const st = theme.vars.palette.stock
   const navigate = useNavigate()
   const { user } = useAuthStore()
   const { currentWorkspace } = useWorkspaceStore()
   const { budgets, loading, fetchBudgets, updateBudget, deleteBudget, duplicateBudget } = useBudgetStore()
   const { purchases, fetchPurchases } = usePurchaseStore()
-  const { refreshSignal } = useAppStore()
+  const refreshSignal = useAppStore((s) => s.refreshSignal)
   const { enqueueSnackbar } = useSnackbar()
   const [formDialog, setFormDialog] = useState({ open: false, budget: null })
   const [deleteConfirm, setDeleteConfirm] = useState(null)

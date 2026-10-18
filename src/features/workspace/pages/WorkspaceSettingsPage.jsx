@@ -72,10 +72,10 @@ function MemberItem({ member, isOwner, currentUserId, onRoleChange, onRemove, la
 
 export default function WorkspaceSettingsPage() {
   const theme = useTheme()
-  const st = theme.palette.stock
+  const st = theme.vars.palette.stock
   const { user } = useAuthStore()
   const { currentWorkspace, members, invitations, fetchMembers, fetchInvitations, updateMemberRole, removeMember, inviteMember, updateWorkspace } = useWorkspaceStore()
-  const { refreshSignal } = useAppStore()
+  const refreshSignal = useAppStore((s) => s.refreshSignal)
   const { enqueueSnackbar } = useSnackbar()
   const [tab, setTab] = useState(0)
   const [inviteDialog, setInviteDialog] = useState(false)
