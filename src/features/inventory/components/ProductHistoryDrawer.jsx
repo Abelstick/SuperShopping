@@ -2,13 +2,13 @@ import { useEffect, useState } from 'react'
 import { Drawer, Box, Typography, List, ListItem, Avatar, Divider, Skeleton, IconButton, Button, useTheme } from '@mui/material'
 import { History, Close } from '@mui/icons-material'
 import { useInventoryStore } from '../store/inventoryStore'
+import { FS } from '@/theme/tokens'
+import { LOCALE } from '@/shared/utils/format'
 
-// Tamaños: 20 título · 15 texto · 13 meta
-const FS = { title: 20, body: 15, meta: 13 }
 const ACTION_LABELS = { created: 'Creado', updated: 'Actualizado', quantity_changed: 'Cantidad modificada', deleted: 'Desactivado' }
 
 // Fecha dd/mm/aaaa hh:mm
-const fmtDateTime = (d) => new Date(d).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })
+const fmtDateTime = (d) => new Date(d).toLocaleString(LOCALE, { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })
 
 export default function ProductHistoryDrawer({ open, product, onClose }) {
   const theme = useTheme()
@@ -60,7 +60,7 @@ export default function ProductHistoryDrawer({ open, product, onClose }) {
           </Box>
         ) : result.error ? (
           <Box role="alert" sx={{ display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'flex-start' }}>
-            <Typography sx={{ fontSize: FS.body, fontWeight: 700 }}>No se pudieron cargar los datos. Revisá tu conexión e intentá de nuevo.</Typography>
+            <Typography sx={{ fontSize: FS.body, fontWeight: 700 }}>No se pudieron cargar los datos. Revisa tu conexión e intenta de nuevo.</Typography>
             <Typography sx={{ fontSize: FS.meta, color: 'text.secondary' }}>Detalle: {result.error.message || 'Sin detalle del servidor'}</Typography>
             <Button variant="outlined" onClick={() => { setResult({ id: null, error: null }); setRetryTick((t) => t + 1) }}>Reintentar</Button>
           </Box>

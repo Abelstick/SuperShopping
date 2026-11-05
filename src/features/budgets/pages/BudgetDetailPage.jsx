@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import {
-  Box, Button, Card, Typography, IconButton, Chip, LinearProgress, Divider,
+  Box, Button, Card, Typography, IconButton, Chip, Divider,
   Dialog, DialogTitle, DialogContent, DialogActions, TextField,
   FormControl, InputLabel, Select, MenuItem, Alert,
   Skeleton, InputAdornment, Menu, ListItemIcon, ListItemText, Tooltip, Switch, FormControlLabel,
@@ -11,7 +11,7 @@ import {
 import {
   ArrowBack, Add, Edit, Delete, ShoppingCart,
   Close, ShoppingBag, Tune, DeleteForever,
-  DoneAll, RemoveDone, Warning, Checklist, ErrorOutlined, Receipt,
+  DoneAll, RemoveDone, Warning, Checklist,
 } from '@mui/icons-material'
 import { useSnackbar } from 'notistack'
 import { useWorkspaceStore } from '@/features/workspace/store/workspaceStore'
@@ -24,11 +24,9 @@ import EmptyState from '@/shared/components/EmptyState'
 import StockBadge from '@/shared/components/StockBadge'
 import { fmtMoney, fmtDate } from '@/shared/utils/format'
 import BudgetStatusChip from '../components/BudgetStatusChip'
+import { BudgetMeter, CategoryIcon, ConfirmDialog, MobileActionBar, NameList, PageHeader, RowDivider, Section } from '@/shared/components/ui'
+import { FS, NUM, reveal } from '@/theme/tokens'
 
-// Tamaños de la pantalla (escala de 4): 48 hero (36 en móvil) · 20 títulos/KPIs · 15 texto · 13 meta
-const FS = { hero: 48, heroXs: 36, title: 20, body: 15, meta: 13 }
-const NUM = { fontVariantNumeric: 'tabular-nums' }
-const reveal = (i) => ({ className: 'reveal', style: { '--i': i } })
 
 function isPreviousCalendarMonth(iso) {
   const d = new Date(`${iso}T00:00:00`)
@@ -48,12 +46,11 @@ function SectionLabel({ children }) {
 // ── Item row ─────────────────────────────────────────────────────────────────
 function ItemRow({ item, isEditor, onEdit, onDelete, multiplyByQty, isLowStock: low, selectMode, selected, onToggleSelect }) {
   const estimated = multiplyByQty ? item.quantity * (item.estimated_price || 0) : (item.estimated_price || 0)
-  const catColor = item.categories?.color
 
   return (
     <Box
       onClick={selectMode ? onToggleSelect : undefined}
-      sx={{ display: 'flex', alignItems: 'center', gap: 2, px: 3, py: 1, minHeight: 72, cursor: selectMode ? 'pointer' : 'default', '&:hover': selectMode ? { bgcolor: 'action.hover' } : {} }}
+      sx={{ display: 'flex', alignItems: 'center', gap: 1.25, pl: { xs: 1.5, sm: 2 }, pr: { xs: 0.75, sm: 1.5 }, py: 0.75, minHeight: 64, cursor: selectMode ? 'pointer' : 'default', '&:hover': selectMode ? { bgcolor: 'action.hover' } : {} }}
     >
       {selectMode && (
         <Checkbox
@@ -61,16 +58,14 @@ function ItemRow({ item, isEditor, onEdit, onDelete, multiplyByQty, isLowStock: 
           checked={selected}
           sx={{ ml: -1 }}
           onClick={(e) => { e.stopPropagation(); onToggleSelect() }}
-          inputProps={{ 'aria-label': `Seleccionar item ${item.product_name}` }}
+          slotProps={{ input: { 'aria-label': `Seleccionar item ${item.product_name}` } }}
         />
       )}
+      <CategoryIcon category={item.categories} size={36} />
       <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-        <Typography sx={{ fontSize: FS.body, fontWeight: 700 }}>{item.product_name}</Typography>
-        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mt: 0.5, alignItems: 'center' }}>
-          <Box sx={{ ...NUM, px: 1, py: 0.5, borderRadius: '8px', border: 1, borderColor: 'divider', fontSize: FS.meta, fontWeight: 600, lineHeight: 1.4 }}>
-            {item.quantity} {item.unit}
-          </Box>
-          {catColor && <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: catColor, flexShrink: 0 }} />}
+        <Typography sx={{ fontSize: FS.body, fontWeight: 600, lineHeight: 1.35 }} noWrap>{item.product_name}</Typography>
+        <Box sx={{ display: 'flex', columnGap: 1, rowGap: 0.25, flexWrap: 'wrap', alignItems: 'center' }}>
+          <Typography component="span" sx={{ ...NUM, fontSize: FS.meta, color: 'text.secondary' }}>{item.quantity} {item.unit}</Typography>
           {low && <StockBadge>Stock bajo</StockBadge>}
         </Box>
       </Box>
@@ -83,9 +78,9 @@ function ItemRow({ item, isEditor, onEdit, onDelete, multiplyByQty, isLowStock: 
         </Box>
       )}
       {!selectMode && isEditor && (
-        <Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0 }}>
-          <IconButton aria-label={`Editar item ${item.product_name}`} onClick={onEdit}><Edit sx={{ fontSize: 20 }} /></IconButton>
-          <IconButton aria-label={`Eliminar item ${item.product_name}`} onClick={onDelete}><Delete sx={{ fontSize: 20 }} /></IconButton>
+        <Box sx={{ display: 'flex', flexShrink: 0 }}>
+          <IconButton aria-label={`Editar item ${item.product_name}`} onClick={onEdit} sx={{ color: 'text.secondary' }}><Edit sx={{ fontSize: 20 }} /></IconButton>
+          <IconButton aria-label={`Eliminar item ${item.product_name}`} onClick={onDelete} sx={{ color: 'text.secondary' }}><Delete sx={{ fontSize: 20 }} /></IconButton>
         </Box>
       )}
     </Box>
@@ -190,7 +185,7 @@ function BudgetItemForm({ open, item, budgetId, categories, products, budgetItem
 
   return (
     <Dialog open={open} onClose={saving ? undefined : onClose} maxWidth="sm" fullWidth>
-      <DialogTitle sx={{ p: 3, pb: 2 }}>
+      <DialogTitle sx={{ p: { xs: 2, sm: 3 }, pb: 2 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
           <Box sx={{ p: 1, bgcolor: 'action.selected', borderRadius: '8px', color: 'primary.main', display: 'flex', flexShrink: 0 }}>
             <ShoppingBag sx={{ fontSize: 24 }} />
@@ -211,7 +206,7 @@ function BudgetItemForm({ open, item, budgetId, categories, products, budgetItem
 
       <Divider />
 
-      <DialogContent sx={{ p: 3 }}>
+      <DialogContent sx={{ p: { xs: 2, sm: 3 } }}>
         {/* Vincular producto */}
         <SectionLabel>Vincular al inventario (opcional)</SectionLabel>
         <Box sx={{ mb: 4 }}>
@@ -369,7 +364,7 @@ function BudgetItemForm({ open, item, budgetId, categories, products, budgetItem
 
       <Divider />
 
-      <DialogActions sx={{ p: 3 }}>
+      <DialogActions sx={{ p: { xs: 2, sm: 3 } }}>
         <Button onClick={onClose} disabled={saving} sx={{ color: 'text.secondary' }}>Cancelar</Button>
         <Button variant="contained" onClick={handleSave} disabled={saving} sx={{ minWidth: 144 }}
           startIcon={saving ? <CircularProgress size={16} color="inherit" /> : undefined}>
@@ -380,35 +375,29 @@ function BudgetItemForm({ open, item, budgetId, categories, products, budgetItem
   )
 }
 
-// ── Hero: estimado vs. presupuesto ───────────────────────────────────────────
-function EstimateHero({ total, target, over, progress }) {
+// ── Estimado vs. presupuesto ─────────────────────────────────────────────────
+function EstimateSummary({ total, target, over, itemCount }) {
   const st = useTheme().vars.palette.stock
-  const skin = over ? st.agotado : st.saludable
-  const Icon = over ? ErrorOutlined : Receipt
   return (
-    <Card sx={{ bgcolor: skin.tint, borderColor: skin.line, p: 3, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-        <Icon sx={{ fontSize: 24, color: skin.icon }} />
-        <Typography component="h2" sx={{ fontSize: FS.body, fontWeight: 700 }}>
-          {target ? 'Estimado vs. presupuesto' : 'Est. total'}
-        </Typography>
+    <Card sx={{ p: { xs: 2, sm: 2.5 }, display: 'flex', flexDirection: 'column', gap: 1.25 }}>
+      <Box sx={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap' }}>
+        <Box sx={{ minWidth: 0 }}>
+          <Typography component="h2" sx={{ fontSize: FS.meta, fontWeight: 600, color: 'text.secondary' }}>
+            {target ? 'Estimado vs. presupuesto' : 'Est. total'}
+          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1, flexWrap: 'wrap' }}>
+            <Typography sx={{ ...NUM, fontSize: { xs: FS.heroXs, md: FS.hero }, fontWeight: 800, lineHeight: 1.1, letterSpacing: '-0.025em', color: over ? st.agotado.text : 'text.primary' }}>
+              {fmtMoney(total)}
+            </Typography>
+            {target ? <Typography sx={{ ...NUM, fontSize: FS.body, color: 'text.secondary' }}>/ {fmtMoney(target)}</Typography> : null}
+          </Box>
+        </Box>
+        <Box sx={{ textAlign: 'right' }}>
+          <Typography sx={{ fontSize: FS.meta, color: 'text.secondary' }}>Items</Typography>
+          <Typography sx={{ ...NUM, fontSize: 18, fontWeight: 700, lineHeight: 1.3 }}>{itemCount}</Typography>
+        </Box>
       </Box>
-      <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1, flexWrap: 'wrap' }}>
-        <Typography sx={{ ...NUM, fontSize: { xs: FS.heroXs, md: FS.hero }, fontWeight: 800, lineHeight: 1.1, letterSpacing: '-0.02em', color: skin.text }}>
-          {fmtMoney(total)}
-        </Typography>
-        {target && (
-          <Typography sx={{ ...NUM, fontSize: FS.body, color: 'text.secondary' }}>/ {fmtMoney(target)}</Typography>
-        )}
-      </Box>
-      {target && (
-        <LinearProgress
-          aria-hidden
-          variant="determinate"
-          value={progress}
-          sx={{ height: 8, bgcolor: 'action.hover', '& .MuiLinearProgress-bar': { bgcolor: over ? st.agotado.icon : 'primary.main' } }}
-        />
-      )}
+      {target ? <BudgetMeter spent={total} limit={target} labels={false} /> : null}
       {over && (
         <Typography sx={{ ...NUM, fontSize: FS.body, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 1, color: st.agotado.text }}>
           <Warning sx={{ fontSize: 20, color: st.agotado.icon }} />
@@ -469,7 +458,6 @@ export default function BudgetDetailPage() {
 
   const target = currentBudget?.target_amount || 0
   const overBudget = Boolean(target && totalEst > target)
-  const budgetProgress = target ? Math.min((totalEst / target) * 100, 100) : 0
 
   const isEditor = ['owner', 'editor'].includes(currentWorkspace?.my_role)
   const primaryIsStart = isEditor && currentBudget?.status === 'active'
@@ -573,13 +561,10 @@ export default function BudgetDetailPage() {
 
   if (!budgetReady && (loading || !loadError)) {
     return (
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-        <Skeleton variant="text" width={240} sx={{ fontSize: FS.title }} />
-        <Box sx={{ display: 'grid', gap: 3, gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: 'minmax(0, 8fr) minmax(0, 4fr)' } }}>
-          <Skeleton variant="rectangular" height={168} sx={{ borderRadius: '12px' }} />
-          <Skeleton variant="rectangular" height={168} sx={{ borderRadius: '12px' }} />
-        </Box>
-        <Skeleton variant="rectangular" height={300} sx={{ borderRadius: '12px' }} />
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+        <Skeleton variant="text" width={240} sx={{ fontSize: FS.page }} />
+        <Skeleton variant="rectangular" height={120} sx={{ borderRadius: '16px' }} />
+        <Skeleton variant="rectangular" height={300} sx={{ borderRadius: '16px' }} />
       </Box>
     )
   }
@@ -597,166 +582,159 @@ export default function BudgetDetailPage() {
 
   const selectedNames = budgetItems.filter((i) => selectedIds.has(i.id)).map((i) => i.product_name)
 
+  const openNewItem = () => setItemDialog({ open: true, item: null })
+  const startShopping = () => navigate(`/shopping/new?budgetId=${budgetId}`)
+  const meta = [currentBudget?.store, currentBudget?.date ? fmtDate(currentBudget.date) : null].filter(Boolean).join(' · ')
+
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-      {/* ── Header: título + única acción primaria ── */}
-      <Box {...reveal(0)} sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
-        <IconButton aria-label="Volver a presupuestos" onClick={() => navigate('/budgets')} sx={{ flexShrink: 0 }}>
-          <ArrowBack fontSize="small" />
-        </IconButton>
-        <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
-            <Typography component="h1" sx={{ fontSize: FS.title, fontWeight: 800, lineHeight: 1.3, letterSpacing: '-0.01em' }}>
-              {currentBudget?.name}
-            </Typography>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, pb: { xs: primaryIsStart ? 2 : 0, sm: 0 } }}>
+      <PageHeader
+        {...reveal(0)}
+        title={currentBudget?.name}
+        onBack={() => navigate('/budgets')}
+        backLabel="Volver a presupuestos"
+        subtitle={(
+          <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
             <BudgetStatusChip status={currentBudget?.status} />
+            {meta && <span>{meta}</span>}
           </Box>
-          <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-            {currentBudget?.store && <Typography sx={{ fontSize: FS.meta, color: 'text.secondary' }}>{currentBudget.store}</Typography>}
-            {currentBudget?.date && <Typography sx={{ ...NUM, fontSize: FS.meta, color: 'text.secondary' }}>{fmtDate(currentBudget.date)}</Typography>}
-          </Box>
-        </Box>
-        {primaryIsStart && (
-          <Button variant="contained" startIcon={<ShoppingCart sx={{ fontSize: 20 }} />} onClick={() => navigate(`/shopping/new?budgetId=${budgetId}`)}>
+        )}
+        actions={primaryIsStart && (
+          <Button variant="contained" startIcon={<ShoppingCart sx={{ fontSize: 20 }} />} onClick={startShopping} sx={{ display: { xs: 'none', sm: 'inline-flex' } }}>
             Iniciar compra
           </Button>
         )}
-      </Box>
+      />
 
       {loadError && <LoadErrorBanner message={loadError.message} onRetry={retry} />}
 
-      {/* ── Nivel 1 y 2: hero + KPI ── */}
-      <Box {...reveal(1)} sx={{ display: 'grid', gap: { xs: 2, md: 3 }, gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: 'minmax(0, 8fr) minmax(0, 4fr)' } }}>
-        <EstimateHero total={totalEst} target={target} over={overBudget} progress={budgetProgress} />
-        <Card sx={{ p: 3, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 1 }}>
-          <Typography sx={{ fontSize: FS.body, color: 'text.secondary' }}>Items</Typography>
-          <Typography sx={{ ...NUM, fontSize: FS.title, fontWeight: 700, lineHeight: 1.3 }}>{budgetItems.length}</Typography>
-        </Card>
+      <Box {...reveal(1)}>
+        <EstimateSummary total={totalEst} target={target} over={overBudget} itemCount={budgetItems.length} />
       </Box>
 
       {/* ── Lista de compras ── */}
-      <Box {...reveal(2)} sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
-          <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1 }}>
-            <Typography component="h2" sx={{ fontSize: FS.title, fontWeight: 700, lineHeight: 1.3 }}>Lista de compras</Typography>
-            {budgetItems.length > 0 && (
-              <Typography sx={{ ...NUM, fontSize: FS.body, color: 'text.secondary' }}>{budgetItems.length} items</Typography>
-            )}
-          </Box>
-          <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
-            {selectMode ? (
-              <>
-                <Typography sx={{ ...NUM, fontSize: FS.body, color: 'text.secondary' }}>
-                  {selectedIds.size} seleccionado{selectedIds.size !== 1 ? 's' : ''}
-                </Typography>
-                <Tooltip title="Seleccionar todos">
-                  <IconButton aria-label="Seleccionar todos" onClick={() => setSelectedIds(new Set(budgetItems.map((i) => i.id)))}>
-                    <DoneAll sx={{ fontSize: 20 }} />
-                  </IconButton>
-                </Tooltip>
-                <Tooltip title="Deseleccionar todos">
-                  <IconButton aria-label="Deseleccionar todos" onClick={() => setSelectedIds(new Set())}>
-                    <RemoveDone sx={{ fontSize: 20 }} />
-                  </IconButton>
-                </Tooltip>
-                <Button variant="outlined" startIcon={<Delete sx={{ fontSize: 20 }} />} disabled={selectedIds.size === 0} onClick={() => setBulkDeleteConfirm(true)}>
-                  Eliminar
-                </Button>
-                <Button color="inherit" startIcon={<Close sx={{ fontSize: 20 }} />} onClick={exitSelectMode} sx={{ color: 'text.secondary' }}>
-                  Cancelar
-                </Button>
-              </>
-            ) : (
-              <>
-                {budgetItems.length > 0 && (
-                  <FormControlLabel
-                    control={<Switch checked={multiplyByQty} onChange={(e) => setMultiplyByQty(e.target.checked)} />}
-                    label={<Typography component="span" sx={{ fontSize: FS.body, color: 'text.secondary' }}>×cant.</Typography>}
-                    labelPlacement="start"
-                    sx={{ m: 0, gap: 0.5 }}
-                  />
-                )}
-                {isEditor && (
-                  <>
-                    {budgetItems.length > 0 && (
-                      <>
-                        <Tooltip title="Seleccionar varios items para eliminar">
-                          <span>
-                            <IconButton aria-label="Seleccionar varios items para eliminar" onClick={enterSelectMode} disabled={bulkLoading}
-                              sx={{ border: 1, borderColor: 'divider' }}>
-                              <Checklist sx={{ fontSize: 20 }} />
-                            </IconButton>
-                          </span>
-                        </Tooltip>
-                        <Tooltip title="Mantenimiento de lista">
-                          <span>
-                            <IconButton aria-label="Mantenimiento de lista" onClick={(e) => setMaintenanceAnchor(e.currentTarget)} disabled={bulkLoading}
-                              sx={{ border: 1, borderColor: 'divider' }}>
-                              <Tune sx={{ fontSize: 20 }} />
-                            </IconButton>
-                          </span>
-                        </Tooltip>
-                        <Menu
-                          anchorEl={maintenanceAnchor}
-                          open={Boolean(maintenanceAnchor)}
-                          onClose={() => setMaintenanceAnchor(null)}
-                          transformOrigin={{ horizontal: 'right', vertical: 'top' }}
-                          anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
-                        >
-                          <MenuItem onClick={() => { setMaintenanceAnchor(null); setClearAllConfirm(true) }}>
-                            <ListItemIcon><DeleteForever fontSize="small" /></ListItemIcon>
-                            <ListItemText>Vaciar lista completa</ListItemText>
-                          </MenuItem>
-                        </Menu>
-                      </>
-                    )}
-                    {lowStockToAdd.length > 0 && (
-                      <Tooltip title="Agrega de una vez todos los productos con stock bajo que aún no están en la lista">
+      <Box {...reveal(2)}>
+        <Section
+          title="Lista de compras"
+          count={budgetItems.length > 0 ? `${budgetItems.length} items` : null}
+          actions={selectMode ? (
+            <>
+              <Typography sx={{ ...NUM, fontSize: FS.body, color: 'text.secondary' }}>
+                {selectedIds.size} seleccionado{selectedIds.size !== 1 ? 's' : ''}
+              </Typography>
+              <Tooltip title="Seleccionar todos">
+                <IconButton aria-label="Seleccionar todos" onClick={() => setSelectedIds(new Set(budgetItems.map((i) => i.id)))}>
+                  <DoneAll sx={{ fontSize: 20 }} />
+                </IconButton>
+              </Tooltip>
+              <Tooltip title="Deseleccionar todos">
+                <IconButton aria-label="Deseleccionar todos" onClick={() => setSelectedIds(new Set())}>
+                  <RemoveDone sx={{ fontSize: 20 }} />
+                </IconButton>
+              </Tooltip>
+              <Button variant="outlined" startIcon={<Delete sx={{ fontSize: 20 }} />} disabled={selectedIds.size === 0} onClick={() => setBulkDeleteConfirm(true)}>
+                Eliminar
+              </Button>
+              <Button color="inherit" startIcon={<Close sx={{ fontSize: 20 }} />} onClick={exitSelectMode} sx={{ color: 'text.secondary' }}>
+                Cancelar
+              </Button>
+            </>
+          ) : (
+            <>
+              {budgetItems.length > 0 && (
+                <FormControlLabel
+                  control={<Switch checked={multiplyByQty} onChange={(e) => setMultiplyByQty(e.target.checked)} />}
+                  label={<Typography component="span" sx={{ fontSize: FS.body, color: 'text.secondary' }}>×cant.</Typography>}
+                  labelPlacement="start"
+                  sx={{ m: 0, gap: 0.5 }}
+                />
+              )}
+              {isEditor && (
+                <>
+                  {budgetItems.length > 0 && (
+                    <>
+                      <Tooltip title="Seleccionar varios items para eliminar">
                         <span>
-                          <Button startIcon={<Warning sx={{ fontSize: 20 }} />} variant="outlined" onClick={handleAddLowStock} disabled={addingLowStock}>
-                            {addingLowStock ? 'Agregando…' : `Stock bajo (${lowStockToAdd.length})`}
-                          </Button>
+                          <IconButton aria-label="Seleccionar varios items para eliminar" onClick={enterSelectMode} disabled={bulkLoading} sx={{ color: 'text.secondary' }}>
+                            <Checklist sx={{ fontSize: 20 }} />
+                          </IconButton>
                         </span>
                       </Tooltip>
-                    )}
-                    <Button startIcon={<Add />} variant={primaryIsStart ? 'outlined' : 'contained'} onClick={() => setItemDialog({ open: true, item: null })}>
-                      Agregar
-                    </Button>
-                  </>
-                )}
-              </>
-            )}
-          </Box>
-        </Box>
-
-        {budgetItems.length === 0 ? (
-          <EmptyState
-            icon={<ShoppingBag sx={{ fontSize: 28 }} />}
-            title="Sin items"
-            body="Agrega productos para planificar la compra"
-            action={isEditor && <Button variant="contained" startIcon={<Add />} onClick={() => setItemDialog({ open: true, item: null })}>Agregar primer item</Button>}
-          />
-        ) : (
-          <Card>
-            {budgetItems.map((item, i) => (
-              <Box key={item.id}>
-                <ItemRow
-                  item={item}
-                  isEditor={isEditor}
-                  multiplyByQty={multiplyByQty}
-                  isLowStock={Boolean(item.product_id && lowStockProductIds.has(item.product_id))}
-                  selectMode={selectMode}
-                  selected={selectedIds.has(item.id)}
-                  onToggleSelect={() => toggleItemSelected(item.id)}
-                  onEdit={() => setItemDialog({ open: true, item })}
-                  onDelete={() => setDeleteConfirm(item)}
-                />
-                {i < budgetItems.length - 1 && <Divider sx={{ mx: 3 }} />}
-              </Box>
-            ))}
-          </Card>
-        )}
+                      <Tooltip title="Mantenimiento de lista">
+                        <span>
+                          <IconButton aria-label="Mantenimiento de lista" onClick={(e) => setMaintenanceAnchor(e.currentTarget)} disabled={bulkLoading} sx={{ color: 'text.secondary' }}>
+                            <Tune sx={{ fontSize: 20 }} />
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                      <Menu
+                        anchorEl={maintenanceAnchor}
+                        open={Boolean(maintenanceAnchor)}
+                        onClose={() => setMaintenanceAnchor(null)}
+                        transformOrigin={{ horizontal: 'right', vertical: 'top' }}
+                        anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+                      >
+                        <MenuItem onClick={() => { setMaintenanceAnchor(null); setClearAllConfirm(true) }}>
+                          <ListItemIcon><DeleteForever fontSize="small" /></ListItemIcon>
+                          <ListItemText>Vaciar lista completa</ListItemText>
+                        </MenuItem>
+                      </Menu>
+                    </>
+                  )}
+                  {lowStockToAdd.length > 0 && (
+                    <Tooltip title="Agrega de una vez todos los productos con stock bajo que aún no están en la lista">
+                      <span>
+                        <Button startIcon={<Warning sx={{ fontSize: 20 }} />} variant="outlined" onClick={handleAddLowStock} disabled={addingLowStock}>
+                          {addingLowStock ? 'Agregando…' : `Stock bajo (${lowStockToAdd.length})`}
+                        </Button>
+                      </span>
+                    </Tooltip>
+                  )}
+                  <Button startIcon={<Add />} variant={primaryIsStart ? 'outlined' : 'contained'} onClick={openNewItem} sx={{ display: { xs: primaryIsStart ? 'none' : 'inline-flex', sm: 'inline-flex' } }}>
+                    Agregar
+                  </Button>
+                </>
+              )}
+            </>
+          )}
+        >
+          {budgetItems.length === 0 ? (
+            <EmptyState
+              icon={<ShoppingBag sx={{ fontSize: 28 }} />}
+              title="Sin items"
+              body="Agrega productos para planificar la compra"
+              action={isEditor && <Button variant="contained" startIcon={<Add />} onClick={openNewItem}>Agregar primer item</Button>}
+            />
+          ) : (
+            <Card>
+              {budgetItems.map((item, i) => (
+                <Box key={item.id}>
+                  <ItemRow
+                    item={item}
+                    isEditor={isEditor}
+                    multiplyByQty={multiplyByQty}
+                    isLowStock={Boolean(item.product_id && lowStockProductIds.has(item.product_id))}
+                    selectMode={selectMode}
+                    selected={selectedIds.has(item.id)}
+                    onToggleSelect={() => toggleItemSelected(item.id)}
+                    onEdit={() => setItemDialog({ open: true, item })}
+                    onDelete={() => setDeleteConfirm(item)}
+                  />
+                  {i < budgetItems.length - 1 && <RowDivider inset={1.5} />}
+                </Box>
+              ))}
+            </Card>
+          )}
+        </Section>
       </Box>
+
+      {/* Móvil: agregar e iniciar quedan al alcance del pulgar */}
+      {primaryIsStart && (
+        <MobileActionBar>
+          <Button variant="outlined" startIcon={<Add />} onClick={openNewItem} sx={{ flex: 1, minHeight: 48 }}>Agregar</Button>
+          <Button variant="contained" startIcon={<ShoppingCart sx={{ fontSize: 20 }} />} onClick={startShopping} sx={{ flex: 1.4, minHeight: 48 }}>Iniciar compra</Button>
+        </MobileActionBar>
+      )}
 
       <BudgetItemForm
         open={itemDialog.open}
@@ -768,72 +746,48 @@ export default function BudgetDetailPage() {
         onClose={() => setItemDialog({ open: false, item: null })}
       />
 
-      {/* Delete single item */}
-      <Dialog open={Boolean(deleteConfirm)} onClose={deletingItem ? undefined : () => setDeleteConfirm(null)} maxWidth="xs" fullWidth>
-        <DialogTitle>Eliminar item</DialogTitle>
-        <DialogContent>
-          <Typography sx={{ fontSize: FS.body, color: 'text.secondary' }}>
-            ¿Eliminar <strong>"{deleteConfirm?.product_name}"</strong> del presupuesto?
-          </Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDeleteConfirm(null)} disabled={deletingItem}>Cancelar</Button>
-          <Button variant="contained" color="error" onClick={handleDeleteItem} disabled={deletingItem}
-            startIcon={deletingItem ? <CircularProgress size={16} color="inherit" /> : undefined}>
-            Eliminar
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <ConfirmDialog
+        open={Boolean(deleteConfirm)}
+        title="Eliminar item"
+        confirmLabel="Eliminar"
+        loading={deletingItem}
+        onCancel={() => setDeleteConfirm(null)}
+        onConfirm={handleDeleteItem}
+      >
+        <Typography sx={{ fontSize: FS.body, color: 'text.secondary' }}>
+          ¿Eliminar <strong>"{deleteConfirm?.product_name}"</strong> del presupuesto?
+        </Typography>
+      </ConfirmDialog>
 
-      {/* Clear all items */}
-      <Dialog open={clearAllConfirm} onClose={() => setClearAllConfirm(false)} maxWidth="xs" fullWidth>
-        <DialogTitle>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <Box sx={{ p: 1, bgcolor: 'error.main', borderRadius: '8px', color: 'error.contrastText', display: 'flex' }}>
-              <DeleteForever sx={{ fontSize: 24 }} />
-            </Box>
-            <Box>
-              <Typography component="span" sx={{ display: 'block', fontSize: FS.title, fontWeight: 700, lineHeight: 1.3 }}>Vaciar lista</Typography>
-              <Typography component="span" sx={{ display: 'block', fontSize: FS.body, fontWeight: 400, color: 'text.secondary' }}>Se eliminan {budgetItems.length} items</Typography>
-            </Box>
-          </Box>
-        </DialogTitle>
-        <DialogContent>
-          <Alert severity="error" sx={{ mb: 2 }}>Esta acción no se puede deshacer.</Alert>
-          <Typography sx={{ fontSize: FS.body, color: 'text.secondary' }}>
-            Se eliminarán <strong>todos</strong> los items de la lista. El presupuesto en sí no será afectado.
-          </Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setClearAllConfirm(false)}>Cancelar</Button>
-          <Button variant="contained" color="error" onClick={handleClearAll}>Vaciar lista</Button>
-        </DialogActions>
-      </Dialog>
+      <ConfirmDialog
+        open={clearAllConfirm}
+        title="Vaciar lista"
+        subtitle={`Se eliminan ${budgetItems.length} items`}
+        icon={<DeleteForever sx={{ fontSize: 22 }} />}
+        confirmLabel="Vaciar lista"
+        onCancel={() => setClearAllConfirm(false)}
+        onConfirm={handleClearAll}
+      >
+        <Alert severity="error" sx={{ mb: 2 }}>Esta acción no se puede deshacer.</Alert>
+        <Typography sx={{ fontSize: FS.body, color: 'text.secondary' }}>
+          Se eliminarán <strong>todos</strong> los items de la lista. El presupuesto en sí no será afectado.
+        </Typography>
+      </ConfirmDialog>
 
-      {/* Delete selected items */}
-      <Dialog open={bulkDeleteConfirm} onClose={bulkDeleting ? undefined : () => setBulkDeleteConfirm(false)} maxWidth="xs" fullWidth>
-        <DialogTitle>Eliminar seleccionados</DialogTitle>
-        <DialogContent>
-          <Typography sx={{ fontSize: FS.body, color: 'text.secondary' }}>
-            ¿Eliminar los <strong>{selectedIds.size}</strong> items seleccionados del presupuesto?
-          </Typography>
-          <Box component="ul" sx={{ m: 0, mt: 2, pl: 3, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-            {selectedNames.slice(0, 5).map((n, i) => (
-              <li key={`${n}-${i}`}><Typography component="span" sx={{ fontSize: FS.body, fontWeight: 600 }}>{n}</Typography></li>
-            ))}
-            {selectedNames.length > 5 && (
-              <li><Typography component="span" sx={{ fontSize: FS.body, color: 'text.secondary' }}>+{selectedNames.length - 5} más</Typography></li>
-            )}
-          </Box>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setBulkDeleteConfirm(false)} disabled={bulkDeleting}>Cancelar</Button>
-          <Button variant="contained" color="error" onClick={handleBulkDelete} disabled={bulkDeleting}
-            startIcon={bulkDeleting ? <CircularProgress size={16} color="inherit" /> : undefined}>
-            {bulkDeleting ? 'Eliminando…' : 'Eliminar'}
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <ConfirmDialog
+        open={bulkDeleteConfirm}
+        title="Eliminar seleccionados"
+        confirmLabel="Eliminar"
+        loadingLabel="Eliminando…"
+        loading={bulkDeleting}
+        onCancel={() => setBulkDeleteConfirm(false)}
+        onConfirm={handleBulkDelete}
+      >
+        <Typography sx={{ fontSize: FS.body, color: 'text.secondary' }}>
+          ¿Eliminar los <strong>{selectedIds.size}</strong> items seleccionados del presupuesto?
+        </Typography>
+        <NameList names={selectedNames} />
+      </ConfirmDialog>
     </Box>
   )
 }

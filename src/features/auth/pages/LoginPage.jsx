@@ -9,8 +9,8 @@ import { useAuthStore } from '../store/authStore'
 import AuthShell from '../components/AuthShell'
 import PasswordField from '../components/PasswordField'
 import { validateEmail, validateRequiredPassword } from '../validation'
+import { FS } from '@/theme/tokens'
 
-const FS = { body: 15, meta: 13 }
 const isCredentialError = (err) =>
   err.code === 'invalid_credentials' || err.status === 400 || /invalid login credentials/i.test(err.message || '')
 

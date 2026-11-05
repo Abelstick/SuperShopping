@@ -10,10 +10,8 @@ import { useSnackbar } from 'notistack'
 import { useShoppingStore } from '../store/shoppingStore'
 import { UNITS } from '@/shared/constants/units'
 import { fmtMoney } from '@/shared/utils/format'
+import { FS, NUM } from '@/theme/tokens'
 
-// Tamaños: 20 título · 15 texto · 13 meta
-const FS = { title: 20, body: 15, meta: 13 }
-const NUM = { fontVariantNumeric: 'tabular-nums' }
 
 // Validación al salir del campo (on blur) y de nuevo al guardar
 const validators = {
@@ -146,10 +144,7 @@ export default function AddItemDialog({ open, budgetItem, initialName, initialPr
   const HintIcon = priceDiff > 0 ? TrendingUp : TrendingDown
 
   return (
-    <Dialog
-      open={open} onClose={saving ? undefined : onClose} maxWidth="xs" fullWidth
-      sx={{ '& .MuiDialog-container': { alignItems: { xs: 'flex-start', sm: 'center' } }, '& .MuiDialog-paper': { m: { xs: 1, sm: 4 }, width: { xs: 'calc(100% - 16px)', sm: undefined }, maxHeight: { xs: 'calc(100dvh - 16px)', sm: undefined } } }}
-    >
+    <Dialog open={open} onClose={saving ? undefined : onClose} maxWidth="xs" fullWidth>
       <DialogTitle sx={{ pb: { xs: 1, sm: 2 } }}>
         <Typography component="span" sx={{ display: 'block', fontSize: FS.title, fontWeight: 700, lineHeight: 1.3 }}>
           {budgetItem ? `Comprar: ${budgetItem.product_name}` : 'Agregar producto'}

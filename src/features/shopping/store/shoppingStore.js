@@ -8,6 +8,22 @@ export const useShoppingStore = create((set, get) => ({
   purchaseItems: [],
   loading: false,
   realtimeChannel: null,
+  // Estado de la conexión en vivo: 'SUBSCRIBED', 'CHANNEL_ERROR', 'TIMED_OUT', 'CLOSED' o null
+  realtimeStatus: null,
+  // Compras sin finalizar del hogar (para ofrecer retomarlas desde cualquier pantalla)
+  activeSessions: [],
+
+  fetchActiveSessions: async (workspaceId) => {
+    if (!workspaceId) { set({ activeSessions: [] }); return { error: null } }
+    const { data, error } = await supabase
+      .from('shopping_sessions')
+      .select('id, budget_id, started_at, budgets(name, store, status)')
+      .eq('workspace_id', workspaceId)
+      .eq('status', 'active')
+      .order('started_at', { ascending: false })
+    if (!error) set({ activeSessions: (data || []).filter((s) => s.budgets?.status === 'active') })
+    return { error }
+  },
 
   startSession: async (budgetId, workspaceId, userId) => {
     set({ loading: true })
@@ -208,14 +224,16 @@ export const useShoppingStore = create((set, get) => ({
         () => get().fetchLocks(sessionId))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'purchase_items', filter: `session_id=eq.${sessionId}` },
         () => get().fetchPurchaseItems(sessionId))
-      .subscribe()
+      .subscribe((status) => {
+        if (get().realtimeChannel === channel || !get().realtimeChannel) set({ realtimeStatus: status })
+      })
 
     set({ realtimeChannel: channel })
   },
 
   unsubscribe: () => {
     const { realtimeChannel } = get()
-    if (realtimeChannel) { supabase.removeChannel(realtimeChannel); set({ realtimeChannel: null }) }
+    if (realtimeChannel) { set({ realtimeChannel: null, realtimeStatus: null }); supabase.removeChannel(realtimeChannel) }
   },
 
   getTotals: () => get().purchaseItems.reduce((acc, i) => acc + (i.total_price || 0), 0),

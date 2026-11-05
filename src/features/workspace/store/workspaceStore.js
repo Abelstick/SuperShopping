@@ -93,6 +93,17 @@ export const useWorkspaceStore = create(
         return { error }
       },
 
+      // Últimos cambios del inventario del hogar. El autor se resuelve con `members`.
+      fetchActivity: async (workspaceId) => {
+        const { data, error } = await supabase
+          .from('product_history')
+          .select('id, action, changes, created_at, user_id, products(name)')
+          .eq('workspace_id', workspaceId)
+          .order('created_at', { ascending: false })
+          .limit(30)
+        return { data: data || [], error }
+      },
+
       fetchMembers: async (workspaceId) => {
         const { data, error } = await supabase
           .from('workspace_members')

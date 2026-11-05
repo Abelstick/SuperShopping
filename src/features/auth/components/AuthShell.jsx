@@ -1,9 +1,8 @@
 import { Box, Typography } from '@mui/material'
 import { ShoppingCart, CheckCircle } from '@mui/icons-material'
+import { FS } from '@/theme/tokens'
 
-// Tamaños de las pantallas de acceso: 48 título (36 en móvil) · 20 titular · 15 texto · 13 meta
-const FS = { hero: 48, heroXs: 36, title: 20, body: 15, meta: 13 }
-const PANEL = '#0F172A' // Slate-900: la marca es plana, sin degradados
+const PANEL = '#0B3D2E' // Pino profundo: la marca es plana, sin degradados
 const FEATURES = [
   'Inventario compartido en tiempo real',
   'Compras colaborativas con tu familia',
@@ -14,7 +13,7 @@ const FEATURES = [
 export function BrandMark({ size = 40, onDark = false }) {
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-      <Box sx={{ width: size, height: size, borderRadius: '12px', bgcolor: onDark ? '#6366F1' : 'primary.main', color: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+      <Box sx={{ width: size, height: size, borderRadius: '12px', bgcolor: onDark ? '#5CD6A9' : 'primary.main', color: onDark ? '#0B3D2E' : 'primary.contrastText', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
         <ShoppingCart sx={{ fontSize: size * 0.5 }} />
       </Box>
       <Typography sx={{ fontSize: FS.title, fontWeight: 800, letterSpacing: '-0.01em', color: onDark ? '#FFFFFF' : 'text.primary' }}>SuperShopping</Typography>
@@ -36,7 +35,7 @@ function BrandContent({ variant, onDark }) {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
       <Typography component="h2" sx={{ fontSize: FS.title, fontWeight: 800, lineHeight: 1.3, color: strong }}>
-        Gestiona las compras <Box component="span" sx={{ color: onDark ? '#A5B4FC' : 'primary.main' }}>de tu hogar</Box> juntos
+        Gestiona las compras <Box component="span" sx={{ color: onDark ? '#8CE3C3' : 'primary.main' }}>de tu hogar</Box> juntos
       </Typography>
       <Typography sx={{ fontSize: FS.body, color: soft, lineHeight: 1.6 }}>
         Organiza el inventario, planifica presupuestos y compra en equipo con actualizaciones en tiempo real.
@@ -44,7 +43,7 @@ function BrandContent({ variant, onDark }) {
       <Box component="ul" sx={{ m: 0, p: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 1.5 }}>
         {FEATURES.map((f) => (
           <Box component="li" key={f} sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-            <CheckCircle sx={{ fontSize: 20, color: onDark ? '#A5B4FC' : 'primary.main' }} />
+            <CheckCircle sx={{ fontSize: 20, color: onDark ? '#8CE3C3' : 'primary.main' }} />
             <Typography component="span" sx={{ fontSize: FS.body, color: onDark ? 'rgba(255,255,255,0.88)' : 'text.primary', fontWeight: 500 }}>{f}</Typography>
           </Box>
         ))}

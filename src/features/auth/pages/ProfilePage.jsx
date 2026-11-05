@@ -1,18 +1,16 @@
 import { useRef, useState } from 'react'
 import {
   Box, Card, Typography, TextField, Button,
-  Avatar, Alert, CircularProgress, useTheme,
+  Avatar, Alert, CircularProgress,
 } from '@mui/material'
 import { Person } from '@mui/icons-material'
 import { useSnackbar } from 'notistack'
 import { useAuthStore } from '../store/authStore'
+import { PageHeader } from '@/shared/components/ui'
+import { FS, reveal } from '@/theme/tokens'
 
-// Tamaños de la pantalla (escala de 4): 48 hero (36 en móvil) · 20 títulos · 15 texto · 13 meta
-const FS = { hero: 48, heroXs: 36, title: 20, body: 15, meta: 13 }
-const reveal = (i) => ({ className: 'reveal', style: { '--i': i } })
 
 export default function ProfilePage() {
-  const st = useTheme().vars.palette.stock.saludable
   const { user, profile, updateProfile } = useAuthStore()
   const { enqueueSnackbar } = useSnackbar()
   // Borrador: mientras no se edite, el campo muestra el nombre del perfil (aunque llegue después)
@@ -39,23 +37,23 @@ export default function ProfilePage() {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-      <Typography {...reveal(0)} component="h1" sx={{ fontSize: FS.title, fontWeight: 800, lineHeight: 1.3, letterSpacing: '-0.01em' }}>Mi Perfil</Typography>
+      <PageHeader {...reveal(0)} title="Mi Perfil" />
 
-      <Box {...reveal(1)} sx={{ display: 'grid', gap: 3, gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: 'minmax(0, 5fr) minmax(0, 7fr)' }, alignItems: 'start' }}>
-        {/* Nivel 1: identidad */}
-        <Card sx={{ bgcolor: st.tint, borderColor: st.line, p: 3, display: 'flex', alignItems: 'center', gap: 3 }}>
-          <Avatar sx={{ width: 80, height: 80, bgcolor: 'primary.main', color: 'primary.contrastText', fontSize: 32, borderRadius: '16px', flexShrink: 0 }}>
+      <Box {...reveal(1)} sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, maxWidth: 720 }}>
+        {/* Identidad */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Avatar sx={{ width: 64, height: 64, bgcolor: 'primary.main', color: 'primary.contrastText', fontSize: 26, flexShrink: 0 }}>
             {profile?.full_name?.[0]?.toUpperCase() || <Person />}
           </Avatar>
           <Box sx={{ minWidth: 0 }}>
-            <Typography component="h2" sx={{ fontSize: { xs: FS.heroXs, md: FS.hero }, fontWeight: 800, lineHeight: 1.1, letterSpacing: '-0.02em', overflowWrap: 'anywhere' }}>
+            <Typography component="h2" sx={{ fontSize: FS.dialog, fontWeight: 700, lineHeight: 1.25, letterSpacing: '-0.01em', overflowWrap: 'anywhere' }}>
               {profile?.full_name}
             </Typography>
             <Typography sx={{ fontSize: FS.body, color: 'text.secondary', overflowWrap: 'anywhere' }}>{user?.email}</Typography>
           </Box>
-        </Card>
+        </Box>
 
-        <Card sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <Card sx={{ p: { xs: 2, sm: 2.5 }, display: 'flex', flexDirection: 'column', gap: 2 }}>
           <Typography component="h2" sx={{ fontSize: FS.title, fontWeight: 700, lineHeight: 1.3 }}>Información personal</Typography>
           {error && <Alert severity="warning">{error}</Alert>}
           <TextField

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import {
   Box, Button, Card, Typography,
   IconButton, Menu, MenuItem, ListItemIcon, ListItemText, Dialog,
-  DialogTitle, DialogContent, DialogActions, TextField, Skeleton, CircularProgress, useTheme,
+  DialogTitle, DialogContent, DialogActions, TextField, Skeleton, CircularProgress,
 } from '@mui/material'
 import {
   Add, MoreVert, Home, People, Delete, Edit, CheckCircle,
@@ -14,10 +14,9 @@ import { useNavigate } from 'react-router-dom'
 import LoadErrorBanner from '@/shared/components/LoadErrorBanner'
 import EmptyState from '@/shared/components/EmptyState'
 import RoleChip from '../components/RoleChip'
+import { ConfirmDialog, PageHeader, PrimaryAction } from '@/shared/components/ui'
+import { FS, reveal } from '@/theme/tokens'
 
-// Tamaños de la pantalla (escala de 4): 48 hero (36 en móvil) · 20 títulos · 15 texto · 13 meta
-const FS = { hero: 48, heroXs: 36, title: 20, body: 15, meta: 13 }
-const reveal = (i) => ({ className: 'reveal', style: { '--i': i } })
 
 function OwnerLine({ workspace }) {
   return (
@@ -30,64 +29,42 @@ function OwnerLine({ workspace }) {
   )
 }
 
-// ── Nivel 1: el hogar activo es la identidad principal de la pantalla ───────
-function CurrentWorkspaceHero({ workspace }) {
-  const st = useTheme().vars.palette.stock.saludable
-  return (
-    <Card sx={{ bgcolor: st.tint, borderColor: st.line, p: 3, display: 'flex', alignItems: 'flex-start', gap: 2 }}>
-      <Box sx={{ width: 48, height: 48, borderRadius: '12px', bgcolor: 'primary.main', color: 'primary.contrastText', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-        <Home />
-      </Box>
-      <Box sx={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
-        <Typography component="h2" sx={{ fontSize: { xs: FS.heroXs, md: FS.hero }, fontWeight: 800, lineHeight: 1.1, letterSpacing: '-0.02em', overflowWrap: 'anywhere' }}>
-          {workspace.name}
-        </Typography>
-        <Box><RoleChip role={workspace.my_role} /></Box>
-        {workspace.description && <Typography sx={{ fontSize: FS.body, color: 'text.secondary' }}>{workspace.description}</Typography>}
-        <OwnerLine workspace={workspace} />
-      </Box>
-    </Card>
-  )
-}
-
 function WorkspaceCard({ workspace, isCurrent, onSelect, onEdit, onDelete }) {
   const [anchorEl, setAnchorEl] = useState(null)
   const isOwner = workspace.my_role === 'owner'
   const close = () => setAnchorEl(null)
 
   return (
-    <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column', border: isCurrent ? '2px solid' : '1px solid', borderColor: isCurrent ? 'primary.main' : 'divider' }}>
-      <Box sx={{ p: 3, flexGrow: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
-        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
-          <Box sx={{ width: 40, height: 40, borderRadius: '8px', bgcolor: 'action.selected', color: 'primary.main', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <Home />
-          </Box>
-          <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-            <Typography component="h3" sx={{ fontSize: FS.title, fontWeight: 700, lineHeight: 1.3 }} noWrap>{workspace.name}</Typography>
-            <Box sx={{ mt: 0.5 }}><RoleChip role={workspace.my_role} /></Box>
-          </Box>
-          {isCurrent && <CheckCircle aria-label="Hogar activo" sx={{ color: 'primary.main', fontSize: 24, flexShrink: 0 }} />}
-          {isOwner && (
-            <>
-              <IconButton aria-label={`Acciones de ${workspace.name}`} onClick={(e) => setAnchorEl(e.currentTarget)} sx={{ flexShrink: 0, mt: -0.5, mr: -1 }}>
-                <MoreVert fontSize="small" />
-              </IconButton>
-              <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={close}>
-                <MenuItem onClick={() => { close(); onEdit(workspace) }}>
-                  <ListItemIcon><Edit fontSize="small" /></ListItemIcon><ListItemText>Editar</ListItemText>
-                </MenuItem>
-                <MenuItem onClick={() => { close(); onDelete(workspace) }}>
-                  <ListItemIcon><Delete fontSize="small" /></ListItemIcon><ListItemText>Eliminar</ListItemText>
-                </MenuItem>
-              </Menu>
-            </>
-          )}
+    <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column', p: { xs: 2, sm: 2.5 }, gap: 1.5, borderColor: isCurrent ? 'primary.main' : 'divider', boxShadow: (t) => (isCurrent ? `inset 0 0 0 1px ${t.vars.palette.primary.main}` : 'none') }}>
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
+        <Box sx={{ width: 44, height: 44, borderRadius: '12px', bgcolor: 'action.selected', color: 'primary.main', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <Home />
         </Box>
-        {workspace.description && <Typography sx={{ fontSize: FS.body, color: 'text.secondary' }}>{workspace.description}</Typography>}
-        <Box sx={{ mt: 'auto' }}><OwnerLine workspace={workspace} /></Box>
+        <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+          <Typography component="h2" sx={{ fontSize: FS.title, fontWeight: 700, lineHeight: 1.3, letterSpacing: '-0.01em' }} noWrap>{workspace.name}</Typography>
+          <Box sx={{ mt: 0.5 }}><RoleChip role={workspace.my_role} /></Box>
+        </Box>
+        {isOwner && (
+          <>
+            <IconButton aria-label={`Acciones de ${workspace.name}`} onClick={(e) => setAnchorEl(e.currentTarget)} sx={{ flexShrink: 0, mt: -0.75, mr: -1, color: 'text.secondary' }}>
+              <MoreVert fontSize="small" />
+            </IconButton>
+            <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={close}>
+              <MenuItem onClick={() => { close(); onEdit(workspace) }}>
+                <ListItemIcon><Edit fontSize="small" /></ListItemIcon><ListItemText>Editar</ListItemText>
+              </MenuItem>
+              <MenuItem onClick={() => { close(); onDelete(workspace) }}>
+                <ListItemIcon><Delete fontSize="small" /></ListItemIcon><ListItemText>Eliminar</ListItemText>
+              </MenuItem>
+            </Menu>
+          </>
+        )}
       </Box>
-      <Box sx={{ px: 3, py: 2, borderTop: 1, borderColor: 'divider' }}>
+      {workspace.description && <Typography sx={{ fontSize: FS.body, color: 'text.secondary' }}>{workspace.description}</Typography>}
+      <Box sx={{ mt: 'auto', display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+        <OwnerLine workspace={workspace} />
         <Button
+          fullWidth
           variant={isCurrent ? 'text' : 'outlined'}
           startIcon={isCurrent ? <CheckCircle sx={{ fontSize: 20 }} /> : undefined}
           onClick={() => onSelect(workspace)}
@@ -100,7 +77,7 @@ function WorkspaceCard({ workspace, isCurrent, onSelect, onEdit, onDelete }) {
   )
 }
 
-const GRID = { display: 'grid', gap: 3, gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }
+const GRID = { display: 'grid', gap: 1.5, gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 320px), 1fr))' }
 
 export default function WorkspacesPage() {
   const navigate = useNavigate()
@@ -173,25 +150,24 @@ export default function WorkspacesPage() {
 
   const showSkeleton = loading && workspaces.length === 0
   const failedWithoutData = Boolean(loadError) && workspaces.length === 0
-  const active = workspaces.find((w) => w.id === currentWorkspace?.id)
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-      <Box {...reveal(0)} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
-        <Typography component="h1" sx={{ fontSize: FS.title, fontWeight: 800, lineHeight: 1.3, letterSpacing: '-0.01em' }}>Mis Hogares</Typography>
-        <Button startIcon={<Add />} variant={workspaces.length === 0 ? 'outlined' : 'contained'} onClick={openCreate}>Nuevo Hogar</Button>
-      </Box>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: { xs: 2.5, md: 3 } }}>
+      <PageHeader
+        {...reveal(0)}
+        title="Mis Hogares"
+        subtitle={currentWorkspace?.name}
+        actions={<PrimaryAction icon={<Add />} label="Nuevo Hogar" onClick={openCreate} variant={workspaces.length === 0 ? 'outlined' : 'contained'} />}
+      />
 
       {loadError && (
         <LoadErrorBanner message={loadError.message} onRetry={() => { setLoadError(null); setRetryTick((t) => t + 1) }} />
       )}
 
-      {active && <Box {...reveal(1)}><CurrentWorkspaceHero workspace={active} /></Box>}
-
       <Box {...reveal(2)}>
         {showSkeleton ? (
           <Box sx={GRID}>
-            {[1, 2, 3].map((i) => <Skeleton key={i} variant="rectangular" height={200} sx={{ borderRadius: '12px' }} />)}
+            {[1, 2, 3].map((i) => <Skeleton key={i} variant="rectangular" height={200} sx={{ borderRadius: '16px' }} />)}
           </Box>
         ) : failedWithoutData ? null : workspaces.length === 0 ? (
           <EmptyState
@@ -238,19 +214,16 @@ export default function WorkspacesPage() {
         </DialogActions>
       </Dialog>
 
-      <Dialog open={Boolean(deleteConfirm)} onClose={deleting ? undefined : () => setDeleteConfirm(null)}>
-        <DialogTitle>Eliminar Hogar</DialogTitle>
-        <DialogContent>
-          <Typography sx={{ fontSize: FS.body }}>¿Estás seguro de que quieres eliminar <strong>"{deleteConfirm?.name}"</strong>? Esta acción no se puede deshacer.</Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDeleteConfirm(null)} disabled={deleting}>Cancelar</Button>
-          <Button variant="contained" color="error" onClick={handleDelete} disabled={deleting}
-            startIcon={deleting ? <CircularProgress size={16} color="inherit" /> : undefined}>
-            Eliminar
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <ConfirmDialog
+        open={Boolean(deleteConfirm)}
+        title="Eliminar Hogar"
+        confirmLabel="Eliminar"
+        loading={deleting}
+        onCancel={() => setDeleteConfirm(null)}
+        onConfirm={handleDelete}
+      >
+        <Typography sx={{ fontSize: FS.body }}>¿Estás seguro de que quieres eliminar <strong>"{deleteConfirm?.name}"</strong>? Esta acción no se puede deshacer.</Typography>
+      </ConfirmDialog>
     </Box>
   )
 }

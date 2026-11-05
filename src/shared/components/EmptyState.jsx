@@ -1,17 +1,18 @@
-import { Box, Card, Typography } from '@mui/material'
+import { Box, Typography } from '@mui/material'
+import { FS } from '@/theme/tokens'
 
-// Estado vacío: icono + título + qué hacer a continuación
+// Estado vacío: icono + título + qué hacer a continuación. Sin caja: es un aviso, no un objeto.
 export default function EmptyState({ icon, title, body, action }) {
   return (
-    <Card sx={{ px: 3, py: 6, display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 2, borderStyle: 'dashed' }}>
-      <Box sx={{ width: 56, height: 56, borderRadius: '12px', bgcolor: 'action.hover', color: 'text.secondary', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+    <Box sx={{ px: 3, py: 6, display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 2 }}>
+      <Box sx={{ width: 64, height: 64, borderRadius: '20px', bgcolor: 'action.selected', color: 'primary.main', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         {icon}
       </Box>
-      <Box>
-        <Typography component="h2" sx={{ fontSize: 20, fontWeight: 700, lineHeight: 1.3 }}>{title}</Typography>
-        {body && <Typography sx={{ fontSize: 15, color: 'text.secondary' }}>{body}</Typography>}
+      <Box sx={{ maxWidth: 360 }}>
+        <Typography component="h2" sx={{ fontSize: FS.title, fontWeight: 700, lineHeight: 1.3, textWrap: 'balance' }}>{title}</Typography>
+        {body && <Typography sx={{ fontSize: FS.body, color: 'text.secondary', mt: 0.5, textWrap: 'balance' }}>{body}</Typography>}
       </Box>
       {action}
-    </Card>
+    </Box>
   )
 }

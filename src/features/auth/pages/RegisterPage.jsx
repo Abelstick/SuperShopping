@@ -9,8 +9,7 @@ import { useAuthStore } from '../store/authStore'
 import AuthShell from '../components/AuthShell'
 import PasswordField from '../components/PasswordField'
 import { validateEmail, validateFullName, validateNewPassword, validateConfirm } from '../validation'
-
-const FS = { body: 15, meta: 13 }
+import { FS } from '@/theme/tokens'
 
 export default function RegisterPage() {
   const navigate = useNavigate()

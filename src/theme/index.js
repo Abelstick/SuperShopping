@@ -1,96 +1,99 @@
 import { createTheme } from '@mui/material/styles'
+import { FS } from './tokens'
 
-// ── Sistema visual: Material moderno, tonal, semántico ───────────────────────
+// ── Sistema visual "Cuenta clara" ────────────────────────────────────────────
 // Un color = un solo significado:
-//   índigo  → marca, acción primaria, foco, estado activo
-//   verde   → SOLO flujos positivos (ingresos, abonos, metas)
-//   coral   → SOLO salidas de capital, déficit, gastos excedidos (y stock agotado)
-//   ámbar   → advertencia, umbral por alcanzar (y stock en riesgo)
+//   pino    → marca, acción primaria, foco, selección, dentro del límite
+//   ámbar   → advertencia: cerca del límite, stock en riesgo, pendiente
+//   tomate  → excedido, déficit, stock por reponer
 //   rojo    → SOLO confirmación de borrado irreversible
-// Oscuro: Slate-950 base, Slate-900 barras, Slate-800 tarjetas. Nunca #000.
+// Neutros con un leve matiz verde. Todo par de texto cumple 4.5:1 (WCAG AA) en ambos esquemas.
 const FONT = '"Roboto Flex Variable", "Roboto Flex", Roboto, system-ui, -apple-system, sans-serif'
 
-// Escala de 4 tamaños: 48 (dato hero) · 20 (títulos y KPIs) · 15 (texto) · 13 (meta)
-const SIZE = { hero: '3rem', title: '1.25rem', body: '0.9375rem', meta: '0.8125rem' }
+const SIZE = { body: `${FS.body / 16}rem`, meta: `${FS.meta / 16}rem`, title: `${FS.title / 16}rem`, dialog: `${FS.dialog / 16}rem`, hero: `${FS.hero / 16}rem` }
 
-// Radios fijos: 8 controles · 12 tarjetas · 16 modales
-const RADIUS = { control: 8, card: 12, modal: 16 }
+// Radios fijos: 10 controles · 16 tarjetas · 24 hojas y modales · 999 píldoras
+const RADIUS = { control: 10, card: 16, modal: 24, pill: 999 }
 
 const tokens = {
   light: {
-    ground: '#F8FAFC',
+    ground: '#F3F5F1',
     surface: '#FFFFFF',
-    surfaceAlt: '#F1F5F9',
+    surfaceAlt: '#E9EDE6',
     bar: '#FFFFFF',
-    ink: '#0F172A',
-    inkMuted: '#475569',
-    inkDisabled: '#64748B',
-    line: 'rgba(15,23,42,0.08)',
-    lineStrong: 'rgba(15,23,42,0.16)',
-    brand: '#4F46E5',
-    brandHover: '#4338CA',
-    brandText: '#4F46E5',
-    brandLight: '#6366F1',
-    brandTint: 'rgba(79,70,229,0.10)',
+    ink: '#16211B',
+    inkMuted: '#526057',
+    inkDisabled: '#66736A',
+    line: 'rgba(22,33,27,0.10)',
+    lineStrong: 'rgba(22,33,27,0.20)',
+    brand: '#0A6B4E',
+    brandHover: '#08573F',
+    brandText: '#0A6B4E',
+    brandLight: '#2C9A75',
+    brandTint: 'rgba(10,107,78,0.10)',
     onBrand: '#FFFFFF',
-    greenText: '#047857',
-    coralText: '#9F1239',
-    coralIcon: '#E11D48',
-    coralTint: '#FFF1F2',
-    coralLine: 'rgba(244,63,94,0.32)',
-    amberText: '#92400E',
-    amberIcon: '#B45309',
-    amberTint: '#FFFBEB',
-    amberLine: 'rgba(245,158,11,0.40)',
-    red: '#DC2626',
-    redHover: '#B91C1C',
-    redText: '#DC2626',
-    hover: 'rgba(15,23,42,0.05)',
-    cardShadow: '0 1px 2px rgba(15,23,42,0.04)',
-    overlayShadow: '0 16px 40px rgba(15,23,42,0.16)',
-    tooltipBg: '#0F172A',
-    tooltipInk: '#F8FAFC',
+    greenText: '#0A6B4E',
+    coralText: '#A92B12',
+    coralIcon: '#D4431F',
+    coralTint: '#FDEEE8',
+    coralLine: 'rgba(212,67,31,0.30)',
+    amberText: '#7A4E00',
+    amberIcon: '#B8740A',
+    amberTint: '#FCF3DF',
+    amberLine: 'rgba(184,116,10,0.36)',
+    red: '#C4231C',
+    redHover: '#A31C16',
+    redText: '#C4231C',
+    hover: 'rgba(22,33,27,0.05)',
+    cardShadow: 'none',
+    floatShadow: '0 6px 16px rgba(10,60,44,0.24)',
+    barShadow: '0 -6px 20px rgba(22,33,27,0.06)',
+    overlayShadow: '0 16px 40px rgba(16,40,30,0.18)',
+    tooltipBg: '#16211B',
+    tooltipInk: '#F3F5F1',
   },
   dark: {
-    ground: '#020617',
-    surface: '#1E293B',
-    surfaceAlt: '#0F172A',
-    bar: '#0F172A',
-    ink: '#F1F5F9',
-    inkMuted: '#94A3B8',
-    inkDisabled: '#7C8AA0',
-    line: 'rgba(255,255,255,0.08)',
-    lineStrong: 'rgba(255,255,255,0.16)',
-    brand: '#4F46E5',
-    brandHover: '#4338CA',
-    brandText: '#818CF8',
-    brandLight: '#A5B4FC',
-    brandTint: 'rgba(129,140,248,0.16)',
+    ground: '#0E1411',
+    surface: '#18211C',
+    surfaceAlt: '#121A16',
+    bar: '#141C18',
+    ink: '#E9EFEA',
+    inkMuted: '#9FADA4',
+    inkDisabled: '#84928A',
+    line: 'rgba(233,239,234,0.10)',
+    lineStrong: 'rgba(233,239,234,0.20)',
+    brand: '#0D7A59',
+    brandHover: '#0A6B4E',
+    brandText: '#5CD6A9',
+    brandLight: '#8CE3C3',
+    brandTint: 'rgba(92,214,169,0.14)',
     onBrand: '#FFFFFF',
-    greenText: '#34D399',
-    coralText: '#FDA4AF',
-    coralIcon: '#FB7185',
-    coralTint: 'rgba(244,63,94,0.14)',
-    coralLine: 'rgba(244,63,94,0.40)',
-    amberText: '#FCD34D',
-    amberIcon: '#FBBF24',
-    amberTint: 'rgba(245,158,11,0.14)',
-    amberLine: 'rgba(245,158,11,0.40)',
-    red: '#DC2626',
-    redHover: '#B91C1C',
-    redText: '#F87171',
-    hover: 'rgba(255,255,255,0.06)',
+    greenText: '#5CD6A9',
+    coralText: '#FF9F85',
+    coralIcon: '#FF8262',
+    coralTint: 'rgba(255,130,98,0.14)',
+    coralLine: 'rgba(255,130,98,0.36)',
+    amberText: '#F3C463',
+    amberIcon: '#E8AE3E',
+    amberTint: 'rgba(232,174,62,0.14)',
+    amberLine: 'rgba(232,174,62,0.36)',
+    red: '#D9342B',
+    redHover: '#BF2A22',
+    redText: '#FF8B80',
+    hover: 'rgba(233,239,234,0.06)',
     cardShadow: 'none',
+    floatShadow: '0 6px 16px rgba(0,0,0,0.5)',
+    barShadow: '0 -6px 20px rgba(0,0,0,0.3)',
     overlayShadow: '0 16px 40px rgba(0,0,0,0.6)',
-    tooltipBg: '#F1F5F9',
-    tooltipInk: '#0F172A',
+    tooltipBg: '#E9EFEA',
+    tooltipInk: '#16211B',
   },
 }
 
 const typography = {
   fontFamily: FONT,
-  h1: { fontWeight: 800, letterSpacing: '-0.02em', lineHeight: 1.1, fontSize: SIZE.hero },
-  h2: { fontWeight: 700, letterSpacing: '-0.01em', lineHeight: 1.3, fontSize: SIZE.title },
+  h1: { fontWeight: 800, letterSpacing: '-0.025em', lineHeight: 1.1, fontSize: SIZE.hero },
+  h2: { fontWeight: 700, letterSpacing: '-0.015em', lineHeight: 1.3, fontSize: SIZE.title },
   h3: { fontWeight: 700, letterSpacing: '-0.01em', lineHeight: 1.3, fontSize: SIZE.title },
   h4: { fontWeight: 700, letterSpacing: '-0.01em', lineHeight: 1.3, fontSize: SIZE.title },
   h5: { fontWeight: 700, letterSpacing: '-0.01em', lineHeight: 1.3, fontSize: SIZE.title },
@@ -106,7 +109,9 @@ const typography = {
 
 const EASE = 'cubic-bezier(0.22, 1, 0.36, 1)'
 const t = (props, ms = 140) => props.map(p => `${p} ${ms}ms ${EASE}`).join(', ')
-const MOBILE = '@media (max-width:1023.95px)'
+// Pantallas táctiles: controles de 44 px y campos de 16 px (iOS amplía la vista con menos de 16 px)
+const TOUCH = '@media (max-width:1023.95px)'
+const SHEET = '@media (max-width:639.95px)'
 
 // `c` son referencias `var(--…)` a palette.system: el CSS se genera una sola vez y el
 // esquema activo cambia solo el valor de las variables, sin recalcular estilos en JS.
@@ -121,6 +126,18 @@ const components = (c) => ({
         scrollbarColor: `${c.lineStrong} transparent`,
       },
       ':focus-visible': { outline: `2px solid ${c.brandText}`, outlineOffset: 2 },
+      // Avisos: un solo tono sobrio; el estado lo cuenta el icono y el texto
+      '.notistack-MuiContent': {
+        borderRadius: RADIUS.control,
+        fontFamily: FONT,
+        fontSize: SIZE.body,
+        fontWeight: 500,
+        boxShadow: c.overlayShadow,
+        backgroundColor: c.tooltipBg,
+        color: c.tooltipInk,
+      },
+      '.notistack-MuiContent-error': { backgroundColor: c.red, color: '#FFFFFF' },
+      '.notistack-MuiContent-warning': { backgroundColor: c.amberIcon, color: '#16211B' },
     },
   },
 
@@ -144,14 +161,14 @@ const components = (c) => ({
         transition: t(['background-color', 'border-color', 'color', 'transform'], 140),
         '&:hover': { boxShadow: 'none' },
         '&:active': { transform: 'scale(0.98)' },
-        [MOBILE]: { minHeight: 44 },
+        [TOUCH]: { minHeight: 44 },
       },
       // MUI v7+ ya no aplica containedError/Success/Warning: el color sale de ownerState
       contained: ({ ownerState }) => {
         const map = {
           error:   [c.red, c.redHover, '#FFFFFF'],
-          success: ['#10B981', '#059669', '#0F172A'],
-          warning: ['#F59E0B', '#D97706', '#0F172A'],
+          success: [c.brand, c.brandHover, c.onBrand],
+          warning: [c.amberIcon, c.amberText, '#16211B'],
         }
         const [bg, hover, fg] = map[ownerState.color] || [c.brand, c.brandHover, c.onBrand]
         return {
@@ -171,6 +188,22 @@ const components = (c) => ({
       sizeLarge: { padding: '12px 24px', fontSize: SIZE.body },
       sizeMedium: { padding: '8px 16px' },
       sizeSmall: { padding: '8px 12px', fontSize: SIZE.body },
+    },
+  },
+
+  MuiFab: {
+    styleOverrides: {
+      root: {
+        boxShadow: c.floatShadow,
+        textTransform: 'none',
+        fontWeight: 600,
+        fontSize: SIZE.body,
+        backgroundColor: c.brand,
+        color: c.onBrand,
+        '&:hover': { backgroundColor: c.brandHover },
+        '&:active': { boxShadow: c.floatShadow },
+      },
+      extended: { borderRadius: RADIUS.card, height: 52, padding: '0 20px', gap: 8 },
     },
   },
 
@@ -209,7 +242,6 @@ const components = (c) => ({
         backgroundColor: c.bar,
         color: c.ink,
         border: 'none',
-        borderRight: `1px solid ${c.line}`,
       },
     },
   },
@@ -245,22 +277,32 @@ const components = (c) => ({
       },
     },
   },
+  MuiInputBase: {
+    styleOverrides: {
+      root: { [TOUCH]: { fontSize: '1rem' } },
+    },
+  },
+  MuiInputLabel: {
+    styleOverrides: { root: { [TOUCH]: { fontSize: '1rem' } } },
+  },
   MuiOutlinedInput: {
     styleOverrides: {
       root: {
         borderRadius: RADIUS.control,
+        backgroundColor: c.surface,
         '& fieldset': { borderColor: c.lineStrong },
         '&:hover fieldset': { borderColor: c.brandText },
         '&.Mui-focused fieldset': { borderColor: c.brandText, borderWidth: 2 },
       },
+      inputSizeSmall: { [TOUCH]: { paddingTop: 11, paddingBottom: 11 } },
     },
   },
   MuiSelect: { styleOverrides: { outlined: { borderRadius: RADIUS.control } } },
 
   MuiChip: {
     styleOverrides: {
-      root: { fontWeight: 600, fontSize: SIZE.meta, borderRadius: RADIUS.control, height: 28 },
-      sizeSmall: { height: 24, fontSize: SIZE.meta, borderRadius: RADIUS.control },
+      root: { fontWeight: 600, fontSize: SIZE.meta, borderRadius: RADIUS.pill, height: 32 },
+      sizeSmall: { height: 24, fontSize: SIZE.meta, borderRadius: RADIUS.pill },
     },
   },
 
@@ -268,17 +310,25 @@ const components = (c) => ({
 
   MuiDialog: {
     styleOverrides: {
-      // Móvil (<640px): el modal es un bottom sheet, salvo que sea fullScreen
+      // Móvil (<640px): el modal es una hoja inferior, salvo que sea fullScreen o pida quedarse arriba
       paper: ({ ownerState }) => ({
         borderRadius: RADIUS.modal,
         backgroundImage: 'none',
         border: `1px solid ${c.line}`,
         boxShadow: c.overlayShadow,
         ...(ownerState?.fullScreen ? {} : {
-          '@media (max-width:639.95px)': {
+          [SHEET]: {
             '&&': {
               margin: 0, position: 'fixed', bottom: 0, left: 0, right: 0,
-              width: '100%', maxWidth: '100%', maxHeight: '90vh', borderRadius: '16px 16px 0 0',
+              width: '100%', maxWidth: '100%', maxHeight: '92dvh',
+              borderRadius: `${RADIUS.modal}px ${RADIUS.modal}px 0 0`,
+              borderBottom: 0,
+              paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+              animation: `sheet-up 240ms ${EASE} both`,
+            },
+            '&::before': {
+              content: '""', display: 'block', flexShrink: 0, alignSelf: 'center',
+              width: 40, height: 4, marginTop: 10, borderRadius: RADIUS.pill, backgroundColor: c.lineStrong,
             },
           },
         }),
@@ -286,10 +336,10 @@ const components = (c) => ({
     },
   },
   MuiDialogTitle: {
-    styleOverrides: { root: { fontWeight: 700, fontSize: SIZE.title, lineHeight: 1.3, padding: '24px 24px 8px' } },
+    styleOverrides: { root: { fontWeight: 700, fontSize: SIZE.dialog, lineHeight: 1.3, letterSpacing: '-0.01em', padding: '20px 24px 8px' } },
   },
   MuiDialogContent: { styleOverrides: { root: { padding: '8px 24px' } } },
-  MuiDialogActions: { styleOverrides: { root: { padding: '16px 24px 24px', gap: 8 } } },
+  MuiDialogActions: { styleOverrides: { root: { padding: '16px 24px 24px', gap: 8, [SHEET]: { padding: '12px 16px 16px', '& > .MuiButton-root': { flex: 1 } } } } },
 
   MuiTooltip: {
     styleOverrides: {
@@ -309,13 +359,13 @@ const components = (c) => ({
 
   MuiLinearProgress: {
     styleOverrides: {
-      root: { borderRadius: RADIUS.control, overflow: 'hidden' },
-      bar: { borderRadius: RADIUS.control },
+      root: { borderRadius: RADIUS.pill, overflow: 'hidden' },
+      bar: { borderRadius: RADIUS.pill },
     },
   },
 
   MuiAlert: {
-    styleOverrides: { root: { borderRadius: RADIUS.card, fontWeight: 500, fontSize: SIZE.body } },
+    styleOverrides: { root: { borderRadius: RADIUS.control, fontWeight: 500, fontSize: SIZE.body } },
   },
 
   MuiTab: {
@@ -327,29 +377,7 @@ const components = (c) => ({
     },
   },
   MuiTabs: {
-    styleOverrides: { indicator: { backgroundColor: c.brandText, height: 2, borderRadius: 1 } },
-  },
-
-  MuiBottomNavigation: {
-    styleOverrides: {
-      root: {
-        height: 64,
-        borderTop: `1px solid ${c.line}`,
-        backgroundColor: c.bar,
-      },
-    },
-  },
-  MuiBottomNavigationAction: {
-    styleOverrides: {
-      root: {
-        color: c.inkMuted,
-        minWidth: 0,
-        minHeight: 44,
-        padding: '8px 4px',
-        '&.Mui-selected': { color: c.brandText },
-        '& .MuiBottomNavigationAction-label': { fontSize: SIZE.meta, fontWeight: 600, '&.Mui-selected': { fontSize: SIZE.meta } },
-      },
-    },
+    styleOverrides: { root: { minHeight: 44 }, indicator: { backgroundColor: c.brandText, height: 2, borderRadius: 1 } },
   },
 
   MuiIconButton: {
@@ -358,12 +386,12 @@ const components = (c) => ({
         borderRadius: RADIUS.control,
         transition: t(['background-color']),
         '&:hover': { backgroundColor: c.hover },
-        [MOBILE]: { minWidth: 44, minHeight: 44 },
+        [TOUCH]: { minWidth: 44, minHeight: 44 },
       },
     },
   },
 
-  MuiCheckbox: { styleOverrides: { root: { [MOBILE]: { padding: 10 } } } },
+  MuiCheckbox: { styleOverrides: { root: { [TOUCH]: { padding: 10 } } } },
 
   MuiMenuItem: {
     styleOverrides: {
@@ -400,6 +428,7 @@ const components = (c) => ({
         fontWeight: 600,
         fontSize: SIZE.body,
         minHeight: 44,
+        minWidth: 44,
         border: `1px solid ${c.lineStrong} !important`,
         '&.Mui-selected': { backgroundColor: c.brandTint, color: c.brandText },
       },
@@ -416,12 +445,12 @@ const palette = (mode) => {
   const c = tokens[mode]
   const dark = mode === 'dark'
   return {
-    primary:   { main: c.brandText, light: c.brandLight, dark: c.brandHover, contrastText: dark ? '#0F172A' : '#FFFFFF' },
-    secondary: { main: dark ? '#94A3B8' : '#64748B', contrastText: dark ? '#0F172A' : '#FFFFFF' },
+    primary:   { main: c.brandText, light: c.brandLight, dark: c.brandHover, contrastText: dark ? c.ground : '#FFFFFF' },
+    secondary: { main: c.inkMuted, contrastText: dark ? c.ground : '#FFFFFF' },
     error:     { main: c.red, light: c.redText, dark: c.redHover, contrastText: '#FFFFFF' },
-    warning:   { main: c.amberText, light: '#F59E0B', dark: '#78350F', contrastText: '#FFFFFF' },
-    success:   { main: c.greenText, light: '#34D399', dark: '#047857', contrastText: '#FFFFFF' },
-    info:      { main: c.brandText, contrastText: dark ? '#0F172A' : '#FFFFFF' },
+    warning:   { main: c.amberText, light: c.amberIcon, dark: '#5C3B00', contrastText: dark ? c.ground : '#FFFFFF' },
+    success:   { main: c.greenText, light: c.brandLight, dark: c.brandHover, contrastText: dark ? c.ground : '#FFFFFF' },
+    info:      { main: c.brandText, contrastText: dark ? c.ground : '#FFFFFF' },
     background: { default: c.ground, paper: c.surface },
     text: { primary: c.ink, secondary: c.inkMuted, disabled: c.inkDisabled },
     divider: c.line,
@@ -430,11 +459,11 @@ const palette = (mode) => {
     action: {
       hover: c.hover,
       selected: c.brandTint,
-      disabled: dark ? 'rgba(255,255,255,0.38)' : 'rgba(15,23,42,0.38)',
+      disabled: dark ? 'rgba(233,239,234,0.38)' : 'rgba(22,33,27,0.38)',
       disabledBackground: c.line,
     },
-    // Tokens semánticos del dominio: estado del stock de la despensa.
-    // Sin verde: el verde es solo para flujos positivos.
+    // Tokens semánticos del dominio. Las claves históricas se conservan:
+    // agotado = tomate (excedido), riesgo = ámbar (advertencia), saludable = neutro.
     stock: {
       agotado:   { text: c.coralText, icon: c.coralIcon, tint: c.coralTint, line: c.coralLine },
       riesgo:    { text: c.amberText, icon: c.amberIcon, tint: c.amberTint, line: c.amberLine },

@@ -3,21 +3,83 @@ import {
   Box, Card, Typography, Button, TextField,
   Avatar, IconButton, ListItemIcon, ListItemText, Menu, MenuItem,
   Dialog, DialogTitle, DialogContent, DialogActions,
-  Tab, Tabs, Alert, Divider, Select, FormControl, InputLabel, Skeleton, CircularProgress, useTheme,
+  Tab, Tabs, Alert, Divider, Select, FormControl, InputLabel, Skeleton, CircularProgress,
 } from '@mui/material'
-import { People, PersonAdd, MoreVert, Delete, Email, Settings, Home, Schedule, SwapHoriz } from '@mui/icons-material'
+import { History, People, PersonAdd, MoreVert, Delete, Email, Settings, Schedule, SwapHoriz } from '@mui/icons-material'
 import { useSnackbar } from 'notistack'
 import { useAuthStore } from '@/features/auth/store/authStore'
 import { useWorkspaceStore } from '../store/workspaceStore'
 import { useAppStore } from '@/store/appStore'
 import LoadErrorBanner from '@/shared/components/LoadErrorBanner'
-import { fmtDate } from '@/shared/utils/format'
+import { LOCALE, fmtDate } from '@/shared/utils/format'
 import { ROLE_LABELS, EMAIL_RE } from '../constants'
 import RoleChip from '../components/RoleChip'
+import { ConfirmDialog, PageHeader, RowDivider, Section, StatusPill } from '@/shared/components/ui'
+import { FS, reveal } from '@/theme/tokens'
 
-// Tamaños de la pantalla (escala de 4): 48 hero (36 en móvil) · 20 títulos · 15 texto · 13 meta
-const FS = { hero: 48, heroXs: 36, title: 20, body: 15, meta: 13 }
-const reveal = (i) => ({ className: 'reveal', style: { '--i': i } })
+
+const ACTIVITY_LABELS = { created: 'creó', updated: 'actualizó', quantity_changed: 'cambió la cantidad de', deleted: 'desactivó' }
+const fmtDateTime = (d) => new Date(d).toLocaleString(LOCALE, { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })
+
+// Quién hizo qué en el inventario del hogar
+function ActivityFeed({ workspaceId, members, fetchActivity }) {
+  const [state, setState] = useState({ status: 'loading', items: [], error: null })
+  const [retryTick, setRetryTick] = useState(0)
+
+  useEffect(() => {
+    let cancelled = false
+    fetchActivity(workspaceId).then(({ data, error }) => {
+      if (!cancelled) setState({ status: error ? 'error' : 'ready', items: data, error })
+    })
+    return () => { cancelled = true }
+  }, [workspaceId, fetchActivity, retryTick])
+
+  if (state.status === 'error') {
+    return <LoadErrorBanner message={state.error?.message || 'Sin detalle del servidor'} onRetry={() => { setState({ status: 'loading', items: [], error: null }); setRetryTick((t) => t + 1) }} />
+  }
+  if (state.status === 'loading') {
+    return (
+      <Card>
+        {[1, 2, 3, 4].map((i) => (
+          <Box key={i} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, px: 2, minHeight: 60 }}>
+            <Skeleton variant="circular" width={36} height={36} />
+            <Box sx={{ flexGrow: 1 }}>
+              <Skeleton variant="text" width="60%" sx={{ fontSize: FS.body }} />
+              <Skeleton variant="text" width="30%" sx={{ fontSize: FS.meta }} />
+            </Box>
+          </Box>
+        ))}
+      </Card>
+    )
+  }
+  if (state.items.length === 0) {
+    return <Typography sx={{ fontSize: FS.body, color: 'text.secondary' }}>Todavía no hay actividad registrada.</Typography>
+  }
+
+  const profileOf = (id) => members.find((m) => m.profiles?.id === id)?.profiles
+  return (
+    <Card>
+      {state.items.map((a, i) => {
+        const author = profileOf(a.user_id)
+        const name = author?.full_name || author?.email || 'Alguien'
+        return (
+          <Box key={a.id}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, px: { xs: 2, sm: 2.5 }, py: 1, minHeight: 60 }}>
+              <Avatar src={author?.avatar_url} alt={name} sx={{ width: 36, height: 36, bgcolor: 'action.selected', color: 'primary.main', fontSize: FS.meta }}>{name[0]?.toUpperCase()}</Avatar>
+              <Box sx={{ minWidth: 0, flexGrow: 1 }}>
+                <Typography sx={{ fontSize: FS.body, lineHeight: 1.35 }}>
+                  <strong>{name}</strong> {ACTIVITY_LABELS[a.action] ?? a.action} <strong>{a.products?.name ?? 'un producto'}</strong>
+                </Typography>
+                <Typography sx={{ fontSize: FS.meta, color: 'text.secondary', fontVariantNumeric: 'tabular-nums' }}>{fmtDateTime(a.created_at)}</Typography>
+              </Box>
+            </Box>
+            {i < state.items.length - 1 && <RowDivider />}
+          </Box>
+        )
+      })}
+    </Card>
+  )
+}
 
 function MemberItem({ member, isOwner, currentUserId, onRoleChange, onRemove, last }) {
   const [anchorEl, setAnchorEl] = useState(null)
@@ -27,26 +89,22 @@ function MemberItem({ member, isOwner, currentUserId, onRoleChange, onRemove, la
 
   return (
     <Box>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, px: 3, py: 1, minHeight: 72 }}>
-        <Avatar src={member.profiles?.avatar_url} alt={label} sx={{ width: 40, height: 40, borderRadius: '8px', bgcolor: 'action.selected', color: 'primary.main' }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, pl: { xs: 2, sm: 2.5 }, pr: { xs: 1, sm: 1.5 }, py: 1, minHeight: 64, flexWrap: { xs: 'wrap', sm: 'nowrap' } }}>
+        <Avatar src={member.profiles?.avatar_url} alt={label} sx={{ width: 40, height: 40, bgcolor: 'action.selected', color: 'primary.main' }}>
           {member.profiles?.full_name?.[0]?.toUpperCase()}
         </Avatar>
-        <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-            <Typography sx={{ fontSize: FS.body, fontWeight: 700 }}>{label}</Typography>
-            {isSelf && (
-              <Box sx={{ px: 1, borderRadius: '8px', bgcolor: 'action.hover' }}>
-                <Typography component="span" sx={{ fontSize: FS.meta, fontWeight: 700, lineHeight: 1.6 }}>Tú</Typography>
-              </Box>
-            )}
+        <Box sx={{ flex: '1 1 140px', minWidth: 0 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
+            <Typography sx={{ fontSize: FS.body, fontWeight: 600, lineHeight: 1.35 }}>{label}</Typography>
+            {isSelf && <StatusPill>Tú</StatusPill>}
           </Box>
-          <Typography sx={{ fontSize: FS.meta, color: 'text.secondary' }} noWrap>{member.profiles?.email}</Typography>
+          <Typography sx={{ fontSize: FS.meta, color: 'text.secondary', lineHeight: 1.35 }} noWrap>{member.profiles?.email}</Typography>
         </Box>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
           <RoleChip role={member.role} />
           {isOwner && !isSelf && (
             <>
-              <IconButton aria-label={`Acciones de ${label}`} onClick={(e) => setAnchorEl(e.currentTarget)}>
+              <IconButton aria-label={`Acciones de ${label}`} onClick={(e) => setAnchorEl(e.currentTarget)} sx={{ color: 'text.secondary' }}>
                 <MoreVert fontSize="small" />
               </IconButton>
               <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={close}>
@@ -65,16 +123,14 @@ function MemberItem({ member, isOwner, currentUserId, onRoleChange, onRemove, la
           )}
         </Box>
       </Box>
-      {!last && <Divider sx={{ mx: 3 }} />}
+      {!last && <RowDivider />}
     </Box>
   )
 }
 
 export default function WorkspaceSettingsPage() {
-  const theme = useTheme()
-  const st = theme.vars.palette.stock
   const { user } = useAuthStore()
-  const { currentWorkspace, members, invitations, fetchMembers, fetchInvitations, updateMemberRole, removeMember, inviteMember, updateWorkspace } = useWorkspaceStore()
+  const { currentWorkspace, members, invitations, fetchMembers, fetchInvitations, fetchActivity, updateMemberRole, removeMember, inviteMember, updateWorkspace } = useWorkspaceStore()
   const refreshSignal = useAppStore((s) => s.refreshSignal)
   const { enqueueSnackbar } = useSnackbar()
   const [tab, setTab] = useState(0)
@@ -157,32 +213,20 @@ export default function WorkspaceSettingsPage() {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-      <Typography {...reveal(0)} component="h1" sx={{ fontSize: FS.title, fontWeight: 800, lineHeight: 1.3, letterSpacing: '-0.01em' }}>Configuración del Hogar</Typography>
+      <PageHeader {...reveal(0)} title="Configuración del Hogar" subtitle={<Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>{currentWorkspace.name}<RoleChip role={currentWorkspace.my_role} /></Box>} />
 
       {loadError && (
         <LoadErrorBanner message={loadError.message} onRetry={() => { setLoadError(null); setMembersReady(false); setRetryTick((t) => t + 1) }} />
       )}
 
-      {/* Nivel 1: el hogar que se está configurando */}
-      <Card {...reveal(1)} sx={{ bgcolor: st.saludable.tint, borderColor: st.saludable.line, p: 3, display: 'flex', alignItems: 'center', gap: 2 }}>
-        <Box sx={{ width: 48, height: 48, borderRadius: '12px', bgcolor: 'primary.main', color: 'primary.contrastText', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          <Home />
-        </Box>
-        <Box sx={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
-          <Typography component="h2" sx={{ fontSize: { xs: FS.heroXs, md: FS.hero }, fontWeight: 800, lineHeight: 1.1, letterSpacing: '-0.02em', overflowWrap: 'anywhere' }}>
-            {currentWorkspace.name}
-          </Typography>
-          <Box><RoleChip role={currentWorkspace.my_role} /></Box>
-        </Box>
-      </Card>
-
-      <Tabs {...reveal(2)} value={tab} onChange={(_, v) => setTab(v)} sx={{ borderBottom: 1, borderColor: 'divider' }}>
+      <Tabs {...reveal(1)} value={tab} onChange={(_, v) => setTab(v)} variant="scrollable" scrollButtons={false} sx={{ borderBottom: 1, borderColor: 'divider' }}>
         <Tab icon={<Settings sx={{ fontSize: 20 }} />} label="General" iconPosition="start" />
         <Tab icon={<People sx={{ fontSize: 20 }} />} label="Miembros" iconPosition="start" />
+        <Tab icon={<History sx={{ fontSize: 20 }} />} label="Actividad" iconPosition="start" />
       </Tabs>
 
       {tab === 0 && (
-        <Card sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <Card sx={{ p: { xs: 2, sm: 2.5 }, display: 'flex', flexDirection: 'column', gap: 2, maxWidth: 720 }}>
           <Typography component="h2" sx={{ fontSize: FS.title, fontWeight: 700, lineHeight: 1.3 }}>Información del Hogar</Typography>
           <TextField
             fullWidth label="Nombre" value={wsForm.name} disabled={!isOwner} required={isOwner}
@@ -238,26 +282,29 @@ export default function WorkspaceSettingsPage() {
               <Card>
                 {invitations.map((inv, i) => (
                   <Box key={inv.id}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, px: 3, py: 1, minHeight: 72 }}>
-                      <Avatar sx={{ width: 40, height: 40, borderRadius: '8px', bgcolor: 'action.hover', color: 'text.secondary' }}><Email /></Avatar>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, px: { xs: 2, sm: 2.5 }, py: 1, minHeight: 64 }}>
+                      <Avatar sx={{ width: 40, height: 40, bgcolor: 'action.hover', color: 'text.secondary' }}><Email /></Avatar>
                       <Box sx={{ flexGrow: 1, minWidth: 0 }}>
                         <Typography sx={{ fontSize: FS.body, fontWeight: 700 }} noWrap>{inv.email}</Typography>
                         <Typography sx={{ fontSize: FS.meta, color: 'text.secondary', fontVariantNumeric: 'tabular-nums' }}>
                           Rol: {ROLE_LABELS[inv.role]} • Expira: {fmtDate(inv.expires_at)}
                         </Typography>
                       </Box>
-                      <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, px: 1, py: 0.5, borderRadius: '8px', bgcolor: st.riesgo.tint, border: 1, borderColor: st.riesgo.line, color: st.riesgo.text, flexShrink: 0 }}>
-                        <Schedule sx={{ fontSize: 16, color: st.riesgo.icon }} />
-                        <Typography component="span" sx={{ fontSize: FS.meta, fontWeight: 700, color: 'inherit', lineHeight: 1.4 }}>Pendiente</Typography>
-                      </Box>
+                      <StatusPill tone="warn" icon={Schedule}>Pendiente</StatusPill>
                     </Box>
-                    {i < invitations.length - 1 && <Divider sx={{ mx: 3 }} />}
+                    {i < invitations.length - 1 && <RowDivider />}
                   </Box>
                 ))}
               </Card>
             </Box>
           )}
         </Box>
+      )}
+
+      {tab === 2 && (
+        <Section title="Actividad del hogar" caption="Últimos cambios en el inventario">
+          <ActivityFeed workspaceId={currentWorkspace.id} members={members} fetchActivity={fetchActivity} />
+        </Section>
       )}
 
       <Dialog open={inviteDialog} onClose={saving ? undefined : () => setInviteDialog(false)} maxWidth="sm" fullWidth>
@@ -290,19 +337,16 @@ export default function WorkspaceSettingsPage() {
         </DialogActions>
       </Dialog>
 
-      <Dialog open={Boolean(removeConfirm)} onClose={removing ? undefined : () => setRemoveConfirm(null)}>
-        <DialogTitle>Eliminar miembro</DialogTitle>
-        <DialogContent>
-          <Typography sx={{ fontSize: FS.body }}>¿Eliminar a <strong>{removeConfirm?.profiles?.full_name}</strong> del hogar?</Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setRemoveConfirm(null)} disabled={removing}>Cancelar</Button>
-          <Button variant="contained" color="error" onClick={handleRemoveMember} disabled={removing}
-            startIcon={removing ? <CircularProgress size={16} color="inherit" /> : undefined}>
-            Eliminar
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <ConfirmDialog
+        open={Boolean(removeConfirm)}
+        title="Eliminar miembro"
+        confirmLabel="Eliminar"
+        loading={removing}
+        onCancel={() => setRemoveConfirm(null)}
+        onConfirm={handleRemoveMember}
+      >
+        <Typography sx={{ fontSize: FS.body }}>¿Eliminar a <strong>{removeConfirm?.profiles?.full_name}</strong> del hogar?</Typography>
+      </ConfirmDialog>
     </Box>
   )
 }

@@ -6,9 +6,7 @@ import {
 import { Receipt, Close, Store, CalendarToday } from '@mui/icons-material'
 import { useSnackbar } from 'notistack'
 import { useBudgetStore } from '../store/budgetStore'
-
-// Tamaños: 20 título · 15 texto · 13 meta
-const FS = { title: 20, body: 15, meta: 13 }
+import { FS } from '@/theme/tokens'
 
 function SectionLabel({ children }) {
   return <Typography component="h3" sx={{ fontSize: FS.body, fontWeight: 700, mb: 2 }}>{children}</Typography>

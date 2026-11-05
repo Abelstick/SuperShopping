@@ -1,4 +1,5 @@
 // Formato de cifras y fechas compartido: S/ 1,234.56 · - S/ 350.00 · dd/mm/aaaa
+export const LOCALE = 'es-PE'
 
 export const fmtMoney = (n) => {
   const v = Number(n) || 0
@@ -10,7 +11,7 @@ export const fmtMoney = (n) => {
 export const fmtDate = (d) => {
   if (!d) return ''
   const value = typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d) ? `${d}T00:00:00` : d
-  return new Date(value).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  return new Date(value).toLocaleDateString(LOCALE, { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
 // AAAA-MM → MM/AAAA (otros valores, como "Sin fecha", se dejan tal cual)

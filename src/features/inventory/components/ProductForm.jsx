@@ -8,9 +8,7 @@ import { Inventory2, Close, QrCode2 } from '@mui/icons-material'
 import { useSnackbar } from 'notistack'
 import { useInventoryStore } from '../store/inventoryStore'
 import { UNITS } from '@/shared/constants/units'
-
-// Tamaños: 20 título · 15 texto · 13 meta
-const FS = { title: 20, body: 15, meta: 13 }
+import { FS } from '@/theme/tokens'
 
 function SectionLabel({ children }) {
   return (

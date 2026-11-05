@@ -5,9 +5,7 @@ import {
 } from '@mui/material'
 import { useSnackbar } from 'notistack'
 import { fmtMoney } from '@/shared/utils/format'
-
-// Tamaños: 20 título · 15 texto · 13 meta
-const FS = { title: 20, body: 15, meta: 13 }
+import { FS } from '@/theme/tokens'
 
 // Validación al salir del campo (on blur) y de nuevo al guardar
 const validators = {

@@ -5,9 +5,8 @@ import {
 } from '@mui/material'
 import { TrendingUp, TrendingDown } from '@mui/icons-material'
 import { fmtMoney } from '@/shared/utils/format'
+import { FS } from '@/theme/tokens'
 
-// Tamaños: 20 título · 15 texto · 13 meta
-const FS = { title: 20, body: 15, meta: 13 }
 const validate = (v) => (v !== '' && Number(v) < 0 ? 'El total no puede ser negativo.' : '')
 
 export default function AdjustTotalDialog({ open, itemsSubtotal, initialTotal, saving, title, confirmLabel, onConfirm, onClose }) {
@@ -43,7 +42,7 @@ export default function AdjustTotalDialog({ open, itemsSubtotal, initialTotal, s
       <DialogTitle>
         <Typography component="span" sx={{ display: 'block', fontSize: FS.title, fontWeight: 700, lineHeight: 1.3 }}>{title}</Typography>
         <Typography component="span" sx={{ display: 'block', fontSize: FS.meta, fontWeight: 400, color: 'text.secondary', mt: 0.5 }}>
-          El precio en caja a veces no coincide con el de góndola — ajustá el total si hace falta.
+          El precio en caja a veces no coincide con el de góndola — ajusta el total si hace falta.
         </Typography>
       </DialogTitle>
       <DialogContent>

@@ -15,7 +15,7 @@ export default function LoadErrorBanner({ message, onRetry }) {
       <ErrorOutlined sx={{ color: st.riesgo.icon }} />
       <Box sx={{ flexGrow: 1, minWidth: 200 }}>
         <Typography sx={{ fontSize: 15, fontWeight: 700 }}>
-          No se pudieron cargar los datos. Revisá tu conexión e intentá de nuevo.
+          No se pudieron cargar los datos. Revisa tu conexión e intenta de nuevo.
         </Typography>
         <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>Detalle: {message}</Typography>
       </Box>

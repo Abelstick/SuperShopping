@@ -22,13 +22,13 @@ Une inventario doméstico, presupuesto previo a la compra y compra en tiempo rea
 
 ## Operating Context
 
-Dominio financiero / inventario / compras. Moneda en soles (S/). Interfaz en español. Uso desde escritorio y móvil (PWA). Modo claro y oscuro ya existen y se conservan.
+Dominio financiero / inventario / compras. Usuarios de Perú: moneda en soles (S/), formato regional `es-PE` e interfaz en español con tuteo (sin voseo). Uso desde escritorio y móvil (PWA). Modo claro y oscuro ya existen y se conservan.
 
 ## Capabilities and Constraints
 
 - Stack: React 19, Vite, MUI v9, Zustand, Supabase, Recharts, notistack. Se mantiene MUI como base.
 - Módulos: Dashboard, Inventario, Presupuestos, Compras, Modo Compra, Análisis, Hogares (workspaces), Perfil.
-- Estados de stock existentes: agotado (cantidad <= mínimo), en riesgo (cantidad hasta 2x el mínimo), saludable.
+- Estados de stock existentes: por reponer, con la etiqueta "Reponer" (cantidad <= mínimo), en riesgo (cantidad hasta 2x el mínimo), saludable.
 - Restricción del rediseño: fidelidad funcional total. No se eliminan campos, botones, filtros, columnas ni validaciones; no se inventa lógica de negocio, cálculos ni estados; los textos de negocio se mantienen literales salvo aprobación explícita.
 - Sin estado de error expuesto por los stores hoy: las acciones de carga devuelven `{ error }` pero no lo guardan.
 
