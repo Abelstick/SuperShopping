@@ -40,6 +40,8 @@ export function PendingItemRow({ item, lock, isLockedByMe, sessionId, userId, on
   const { enqueueSnackbar } = useSnackbar()
   const isLocked = Boolean(lock)
   const canInteract = !isLocked || isLockedByMe
+  // Mientras se agrega no se puede abrir: evita enviar el mismo producto dos veces
+  const canOpen = canInteract && !selectMode && !busy
 
   const handleLock = async () => {
     if (isLockedByMe) {
@@ -79,11 +81,12 @@ export function PendingItemRow({ item, lock, isLockedByMe, sessionId, userId, on
       <ButtonBase
         component="div"
         role={selectMode ? undefined : 'button'}
-        tabIndex={selectMode ? -1 : 0}
+        tabIndex={canOpen ? 0 : -1}
         aria-label={selectMode ? undefined : `Comprar ${item.product_name}: editar cantidad y precio`}
-        disabled={!canInteract || selectMode}
-        onClick={selectMode ? undefined : () => onOpen(item)}
-        sx={{ flexGrow: 1, minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: 1, py: compact ? 0.75 : 1.25, pl: 0.25, borderRadius: '10px', textAlign: 'left', '&.Mui-disabled': { pointerEvents: selectMode ? 'none' : 'auto' } }}
+        disabled={!canOpen}
+        onClick={canOpen ? () => onOpen(item) : undefined}
+        onKeyDown={canOpen ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(item) } } : undefined}
+        sx={{ flexGrow: 1, minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: 1, py: compact ? 0.75 : 1.25, pl: 0.25, borderRadius: '10px', textAlign: 'left' }}
       >
         <Box sx={{ flexGrow: 1, minWidth: 0 }}>
           <Typography sx={{ fontSize: 16, fontWeight: 600, lineHeight: 1.3, color: canInteract ? 'text.primary' : 'text.secondary' }} noWrap>{item.product_name}</Typography>

@@ -23,6 +23,7 @@ import LoadErrorBanner from '@/shared/components/LoadErrorBanner'
 import EmptyState from '@/shared/components/EmptyState'
 import StockBadge from '@/shared/components/StockBadge'
 import { fmtMoney, fmtDate } from '@/shared/utils/format'
+import { normalizeText } from '@/shared/utils/text'
 import BudgetStatusChip from '../components/BudgetStatusChip'
 import { BudgetMeter, CategoryIcon, ConfirmDialog, MobileActionBar, NameList, PageHeader, RowDivider, Section } from '@/shared/components/ui'
 import { FS, NUM, reveal } from '@/theme/tokens'
@@ -180,6 +181,7 @@ function BudgetItemForm({ open, item, budgetId, categories, products, budgetItem
   }
 
   const submitLabel = isEdit ? 'Guardar cambios' : 'Agregar item'
+  const nameInList = Boolean(form.product_name.trim()) && budgetItems.some((bi) => bi.id !== item?.id && normalizeText(bi.product_name) === normalizeText(form.product_name))
   const selectedCategory = categories.find((c) => c.id === form.category_id)
   const st = theme.vars.palette.stock
 
@@ -261,8 +263,8 @@ function BudgetItemForm({ open, item, budgetId, categories, products, budgetItem
               value={form.product_name}
               onChange={set('product_name')}
               onBlur={blur('product_name')}
-              error={Boolean(fieldErrors.product_name)}
-              helperText={fieldErrors.product_name || ' '}
+              error={Boolean(fieldErrors.product_name) && !form.product_name.trim()}
+              helperText={form.product_name.trim() ? (nameInList ? 'Ya está en esta lista.' : ' ') : (fieldErrors.product_name || ' ')}
               inputRef={nameRef}
               placeholder="Ej: Leche, Arroz 1kg…"
               autoFocus={!isEdit}
@@ -469,8 +471,12 @@ export default function BudgetDetailPage() {
   const lowStockProducts = useMemo(() => products.filter(isLowStock), [products])
   const lowStockProductIds = useMemo(() => new Set(lowStockProducts.map((p) => p.id)), [lowStockProducts])
   const lowStockToAdd = useMemo(
-    () => lowStockProducts.filter((p) => !addedProductIds.has(p.id)),
-    [lowStockProducts, addedProductIds]
+    () => {
+      // Por producto y también por nombre: un item escrito a mano no tiene producto vinculado
+      const names = new Set(budgetItems.map((i) => normalizeText(i.product_name)))
+      return lowStockProducts.filter((p) => !addedProductIds.has(p.id) && !names.has(normalizeText(p.name)))
+    },
+    [lowStockProducts, addedProductIds, budgetItems]
   )
 
   const handleAddLowStock = async () => {

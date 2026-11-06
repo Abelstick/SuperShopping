@@ -1,6 +1,23 @@
 import { create } from 'zustand'
 import { supabase } from '@/lib/supabase'
 
+const UNIQUE_VIOLATION = '23505'
+const ITEM_SELECT = `*, profiles!purchase_items_purchased_by_fkey(id, full_name, avatar_url), categories(name, color)`
+
+// Agrega una fila o, si ya está (la trajo antes un evento en vivo), la actualiza
+const upsertById = (items, row) => (items.some((i) => i.id === row.id)
+  ? items.map((i) => (i.id === row.id ? { ...i, ...row } : i))
+  : [...items, row])
+
+// Lectura del carrito: una a la vez, y la última respuesta siempre refleja el estado más reciente.
+// Si algo cambia durante una lectura, su respuesta se descarta y se vuelve a leer: las respuestas
+// lentas o fuera de orden no pueden revivir productos eliminados ni pisar cambios recientes.
+const cartSync = { running: null, stale: false, sessionId: null }
+const markCartChanged = () => { if (cartSync.running) cartSync.stale = true }
+
+// Inserciones en curso por producto del presupuesto: la segunda espera a la primera
+const budgetItemInserts = new Map()
+
 export const useShoppingStore = create((set, get) => ({
   session: null,
   participants: [],
@@ -27,15 +44,29 @@ export const useShoppingStore = create((set, get) => ({
 
   startSession: async (budgetId, workspaceId, userId) => {
     set({ loading: true })
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('shopping_sessions')
       .insert({ budget_id: budgetId, workspace_id: workspaceId, status: 'active', created_by: userId })
       .select()
       .single()
 
+    // Otro dispositivo inició esta compra al mismo tiempo: se usa esa sesión en lugar de fallar
+    if (error?.code === UNIQUE_VIOLATION) {
+      const { data: active } = await supabase
+        .from('shopping_sessions')
+        .select('*')
+        .eq('budget_id', budgetId)
+        .eq('status', 'active')
+        .limit(1)
+        .maybeSingle()
+      if (active) { data = active; error = null }
+    }
+
     if (!error && data) {
       set({ session: data })
-      await supabase.from('shopping_participants').insert({ session_id: data.id, user_id: userId })
+      await supabase
+        .from('shopping_participants')
+        .upsert({ session_id: data.id, user_id: userId }, { onConflict: 'session_id,user_id' })
       await get().subscribeToSession(data.id)
     }
     set({ loading: false })
@@ -95,15 +126,47 @@ export const useShoppingStore = create((set, get) => ({
     set({ locks: data || [] })
   },
 
-  fetchPurchaseItems: async (sessionId) => {
-    if (!sessionId) return
-    const { data, error } = await supabase
+  fetchPurchaseItems: (sessionId) => {
+    if (!sessionId) return undefined
+    cartSync.sessionId = sessionId
+    if (cartSync.running) { cartSync.stale = true; return cartSync.running }
+
+    cartSync.running = (async () => {
+      try {
+        do {
+          cartSync.stale = false
+          const requested = cartSync.sessionId
+          const { data, error } = await supabase
+            .from('purchase_items')
+            .select(ITEM_SELECT)
+            .eq('session_id', requested)
+            .order('created_at')
+            .order('id')
+          if (error) { console.error('fetchPurchaseItems failed', error); return }
+          if (!cartSync.stale && get().session?.id === requested) set({ purchaseItems: data || [] })
+        } while (cartSync.stale)
+      } finally {
+        cartSync.running = null
+      }
+    })()
+    return cartSync.running
+  },
+
+  // Busca el producto del presupuesto ya agregado: primero aquí y luego en la base,
+  // porque puede haberlo comprado otra persona sin que el aviso en vivo haya llegado.
+  findCartRow: async (sessionId, budgetItemId) => {
+    const local = get().purchaseItems.find((i) => i.budget_item_id === budgetItemId)
+    if (local) return local
+    const { data } = await supabase
       .from('purchase_items')
-      .select(`*, profiles!purchase_items_purchased_by_fkey(id, full_name, avatar_url), categories(name, color)`)
+      .select(ITEM_SELECT)
       .eq('session_id', sessionId)
-    if (error) { console.error('fetchPurchaseItems failed', error); return }
-    if (get().session?.id !== sessionId) return
-    set({ purchaseItems: data || [] })
+      .eq('budget_item_id', budgetItemId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    if (data) set((s) => ({ purchaseItems: upsertById(s.purchaseItems, data) }))
+    return data ?? null
   },
 
   lockItem: async (sessionId, budgetItemId, userId) => {
@@ -121,39 +184,94 @@ export const useShoppingStore = create((set, get) => ({
       .eq('budget_item_id', budgetItemId)
   },
 
-  addPurchaseItem: async (sessionId, purchaseId, item, userId, workspaceId) => {
-    // If the item has no linked product, auto-create one in inventory
-    let resolvedProductId = item.product_id || null
-    if (!resolvedProductId && item.product_name?.trim() && workspaceId) {
-      const { data: newProduct } = await supabase
-        .from('products')
+  // Sin producto vinculado: usa el del inventario con ese nombre y, si no existe, lo crea
+  resolveProductId: async (item, userId, workspaceId) => {
+    if (item.product_id) return item.product_id
+    const name = item.product_name?.trim()
+    if (!name || !workspaceId) return null
+
+    const pattern = name.replace(/[\\%_]/g, '\\$&')
+    const { data: existing } = await supabase
+      .from('products')
+      .select('id')
+      .eq('workspace_id', workspaceId)
+      .eq('is_active', true)
+      .ilike('name', pattern)
+      .limit(1)
+      .maybeSingle()
+    if (existing) return existing.id
+
+    const { data: created } = await supabase
+      .from('products')
+      .insert({
+        name,
+        workspace_id: workspaceId,
+        category_id: item.category_id || null,
+        unit: item.unit || 'unidad',
+        current_quantity: 0,
+        created_by: userId,
+      })
+      .select('id')
+      .single()
+    return created?.id ?? null
+  },
+
+  // Un producto del presupuesto solo entra una vez al carrito de la compra. Si ya está:
+  //   onExisting 'keep'   → se deja como está (marcar con un toque, agregar varios)
+  //   onExisting 'update' → se le aplican los datos del formulario, como el precio
+  // El resultado lleva `existed: true` en esos casos.
+  addPurchaseItem: async (sessionId, purchaseId, item, userId, workspaceId, { onExisting = 'keep' } = {}) => {
+    const insertRow = async () => {
+      const productId = await get().resolveProductId(item, userId, workspaceId)
+      const { data, error } = await supabase
+        .from('purchase_items')
         .insert({
-          name: item.product_name.trim(),
-          workspace_id: workspaceId,
-          category_id: item.category_id || null,
-          unit: item.unit || 'unidad',
-          current_quantity: 0,
-          created_by: userId,
+          ...item,
+          product_id: productId,
+          session_id: sessionId,
+          purchase_id: purchaseId,
+          purchased_by: userId,
         })
-        .select('id')
+        .select(ITEM_SELECT)
         .single()
-      if (newProduct) resolvedProductId = newProduct.id
+      if (!error && data) {
+        set((s) => ({ purchaseItems: upsertById(s.purchaseItems, data) }))
+        markCartChanged()
+      }
+      return { data, error }
     }
 
-    const { data, error } = await supabase
-      .from('purchase_items')
-      .insert({
-        ...item,
-        product_id: resolvedProductId,
-        session_id: sessionId,
-        purchase_id: purchaseId,
-        purchased_by: userId,
-      })
-      .select(`*, profiles!purchase_items_purchased_by_fkey(id, full_name, avatar_url), categories(name, color)`)
-      .single()
+    const budgetItemId = item.budget_item_id
+    if (!budgetItemId) return insertRow()
 
-    if (!error && data) set((s) => ({ purchaseItems: [...s.purchaseItems, data] }))
-    return { data, error }
+    const useExisting = async (row) => {
+      if (onExisting !== 'update') return { data: row, error: null, existed: true }
+      const { quantity, unit_price, total_price, unit, brand, is_household } = item
+      const { data, error } = await get().updatePurchaseItem(row.id, { quantity, unit_price, total_price, unit, brand, is_household })
+      return { data: data ?? row, error, existed: true }
+    }
+
+    const previous = budgetItemInserts.get(budgetItemId)
+    const task = (async () => {
+      if (previous) await previous.catch(() => {})
+      const existing = await get().findCartRow(sessionId, budgetItemId)
+      if (existing) return useExisting(existing)
+
+      const result = await insertRow()
+      // Otra persona lo agregó justo ahora y el índice único de la base lo rechazó
+      if (result.error?.code === UNIQUE_VIOLATION) {
+        const winner = await get().findCartRow(sessionId, budgetItemId)
+        if (winner) return useExisting(winner)
+      }
+      return result
+    })()
+
+    budgetItemInserts.set(budgetItemId, task)
+    try {
+      return await task
+    } finally {
+      if (budgetItemInserts.get(budgetItemId) === task) budgetItemInserts.delete(budgetItemId)
+    }
   },
 
   updatePurchaseItem: async (id, updates) => {
@@ -163,7 +281,10 @@ export const useShoppingStore = create((set, get) => ({
       .eq('id', id)
       .select()
       .single()
-    if (!error && data) set((s) => ({ purchaseItems: s.purchaseItems.map((i) => i.id === id ? { ...i, ...data } : i) }))
+    if (!error && data) {
+      set((s) => ({ purchaseItems: s.purchaseItems.map((i) => i.id === id ? { ...i, ...data } : i) }))
+      markCartChanged()
+    }
     return { data, error }
   },
 
@@ -184,19 +305,26 @@ export const useShoppingStore = create((set, get) => ({
     apply(patch)
     const { error } = await supabase.from('purchase_items').update(patch).eq('id', id)
     if (error) apply({ quantity: prev.quantity, total_price: prev.total_price })
+    markCartChanged()
     return { error }
   },
 
   removePurchaseItem: async (id) => {
     const { error } = await supabase.from('purchase_items').delete().eq('id', id)
-    if (!error) set((s) => ({ purchaseItems: s.purchaseItems.filter((i) => i.id !== id) }))
+    if (!error) {
+      set((s) => ({ purchaseItems: s.purchaseItems.filter((i) => i.id !== id) }))
+      markCartChanged()
+    }
     return { error }
   },
 
   removePurchaseItemsBulk: async (ids) => {
     if (!ids.length) return { error: null }
     const { error } = await supabase.from('purchase_items').delete().in('id', ids)
-    if (!error) set((s) => ({ purchaseItems: s.purchaseItems.filter((i) => !ids.includes(i.id)) }))
+    if (!error) {
+      set((s) => ({ purchaseItems: s.purchaseItems.filter((i) => !ids.includes(i.id)) }))
+      markCartChanged()
+    }
     return { error }
   },
 

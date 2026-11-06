@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import {
   Box, Typography, Button, Dialog, DialogTitle, DialogContent, DialogActions,
-  TextField, Checkbox, FormControlLabel, Switch, Autocomplete,
+  TextField, Checkbox, FormControlLabel, Switch, Autocomplete, Alert,
   FormControl, InputLabel, MenuItem, Select, InputAdornment, CircularProgress, Collapse, useTheme,
 } from '@mui/material'
 import { TrendingUp, TrendingDown, ExpandMore, ExpandLess } from '@mui/icons-material'
@@ -10,6 +10,7 @@ import { useSnackbar } from 'notistack'
 import { useShoppingStore } from '../store/shoppingStore'
 import { UNITS } from '@/shared/constants/units'
 import { fmtMoney } from '@/shared/utils/format'
+import { normalizeText } from '@/shared/utils/text'
 import { FS, NUM } from '@/theme/tokens'
 
 
@@ -22,10 +23,10 @@ const validators = {
 const FIELD_ORDER = ['product_name', 'quantity', 'unit_price']
 const NAME_ID = 'shopping-item-name'
 
-export default function AddItemDialog({ open, budgetItem, initialName, initialProduct, sessionId, purchaseId, userId, workspaceId, products, categories, onClose }) {
+export default function AddItemDialog({ open, budgetItem, initialName, initialProduct, sessionId, purchaseId, userId, workspaceId, products, categories, pendingItems = [], cartItems = [], onEditExisting, onClose }) {
   const theme = useTheme()
   const st = theme.vars.palette.stock
-  const { addPurchaseItem, unlockItem } = useShoppingStore()
+  const { addPurchaseItem, unlockItem, getLockForItem } = useShoppingStore()
   const { enqueueSnackbar } = useSnackbar()
   const [form, setForm] = useState({
     product_name: '', product_id: '', brand: '', quantity: 1, unit_price: '', unit: 'unidad', category_id: '', is_household: true,
@@ -93,6 +94,15 @@ export default function AddItemDialog({ open, budgetItem, initialName, initialPr
 
   const linkedCategory = categories.find((c) => c.id === form.category_id)
 
+  // Con "+" se puede elegir o escribir algo que ya está en la compra: se reconoce por producto o nombre
+  const typedName = normalizeText(form.product_name)
+  const isSameProduct = (row) => (form.product_id && row.product_id === form.product_id) || (typedName && normalizeText(row.product_name) === typedName)
+  const matchedPending = !budgetItem && typedName ? pendingItems.find(isSameProduct) : null
+  const matchedCart = !budgetItem && typedName ? cartItems.find(isSameProduct) : null
+  const targetBudgetItem = budgetItem ?? matchedPending ?? null
+  const pendingLock = matchedPending ? getLockForItem(matchedPending.id) : null
+  const lockedByOther = pendingLock && pendingLock.user_id !== userId
+
   const handleProductPick = (value) => {
     if (value && typeof value === 'object') {
       setForm((f) => ({ ...f, product_name: value.name, product_id: value.id, unit: value.unit, category_id: value.category_id || '' }))
@@ -115,7 +125,7 @@ export default function AddItemDialog({ open, budgetItem, initialName, initialPr
     const firstInvalid = FIELD_ORDER.find((f) => errs[f])
     if (firstInvalid) { focusField(firstInvalid); return }
     setSaving(true)
-    const { error } = await addPurchaseItem(
+    const { error, existed } = await addPurchaseItem(
       sessionId, purchaseId,
       {
         product_name: form.product_name.trim(),
@@ -124,18 +134,19 @@ export default function AddItemDialog({ open, budgetItem, initialName, initialPr
         unit_price: form.unit_price ? Number(form.unit_price) : null,
         total_price: total || null,
         unit: form.unit,
-        budget_item_id: budgetItem?.id ?? null,
+        budget_item_id: targetBudgetItem?.id ?? null,
         product_id: form.product_id || null,
         category_id: form.category_id || null,
         is_household: form.is_household,
       },
       userId,
       workspaceId,
+      { onExisting: 'update' },
     )
     setSaving(false)
     if (error) { enqueueSnackbar('Error al agregar el producto', { variant: 'error' }); return }
-    if (budgetItem) await unlockItem(sessionId, budgetItem.id)
-    enqueueSnackbar(`"${form.product_name}" agregado`, { variant: 'success' })
+    if (targetBudgetItem) await unlockItem(sessionId, targetBudgetItem.id)
+    enqueueSnackbar(existed ? `"${form.product_name}" actualizado en el carrito` : `"${form.product_name}" agregado`, { variant: 'success' })
     onClose()
   }
 
@@ -232,6 +243,22 @@ export default function AddItemDialog({ open, budgetItem, initialName, initialPr
                 </Select>
               </FormControl>
             )
+          )}
+
+          {matchedCart ? (
+            <Alert
+              severity="warning"
+              action={onEditExisting && <Button color="inherit" size="small" onClick={() => onEditExisting(matchedCart)}>Editar el que ya está</Button>}
+              sx={{ alignItems: 'center' }}
+            >
+              Ya está en el carrito: {Number(matchedCart.quantity)} {matchedCart.unit}{matchedCart.total_price != null ? ` · ${fmtMoney(matchedCart.total_price)}` : ''}
+            </Alert>
+          ) : matchedPending && (
+            <Alert severity={lockedByOther ? 'warning' : 'info'}>
+              {lockedByOther
+                ? `${pendingLock.profiles?.full_name ?? 'Otra persona'} lo está comprando. Si lo agregas, se actualizará el mismo producto.`
+                : 'Está en Pendientes: al agregarlo, se marcará como comprado.'}
+            </Alert>
           )}
 
           <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: '1fr 1fr' }}>

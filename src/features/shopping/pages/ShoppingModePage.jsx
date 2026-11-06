@@ -23,6 +23,7 @@ import EmptyState from '@/shared/components/EmptyState'
 import { CategoryIcon, ConfirmDialog, NameList, RowDivider } from '@/shared/components/ui'
 import { fmtMoney } from '@/shared/utils/format'
 import { roundQty, stepFor } from '@/shared/utils/quantity'
+import { normalizeText } from '@/shared/utils/text'
 import AddItemDialog from '../components/AddItemDialog'
 import { CartItemRow, InventorySuggestionRow, PendingItemRow } from '../components/ShoppingRows'
 import { SpendDock, SpendTicket } from '../components/SpendSummary'
@@ -33,8 +34,6 @@ const DENSITY_KEY = 'shopping.density'
 const SUGGESTIONS_MAX = 6
 const NO_CATEGORY = 'none'
 
-// Búsqueda sin tildes ni mayúsculas
-const norm = (s) => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
 // Sin preferencia guardada, el celular arranca en vista compacta (más productos a la vista)
 const isSmallScreen = () => { try { return window.matchMedia('(max-width:639.95px)').matches } catch { return false } }
 const readCompact = () => {
@@ -192,6 +191,8 @@ export default function ShoppingModePage() {
   // and — since neither run sees the other's still-in-flight insert — create
   // two shopping_sessions/purchases rows for the same visit.
   const initKeyRef = useRef(null)
+  // Iniciar una compra nueva requiere el hogar, que puede cargar después que esta pantalla
+  const workspaceReady = Boolean(sessionId || currentWorkspace)
 
   useEffect(() => {
     const resolveSessionPurchase = async (sessId, workspaceId, budgetIdRef) => {
@@ -214,7 +215,15 @@ export default function ShoppingModePage() {
         },
         user.id
       )
-      return created ?? null
+      if (created) return created
+
+      // Otro dispositivo la creó al mismo tiempo (session_id es único)
+      const { data: other } = await supabase
+        .from('purchases')
+        .select('id, name, total_amount')
+        .eq('session_id', sessId)
+        .maybeSingle()
+      return other ?? null
     }
 
     const init = async () => {
@@ -266,12 +275,12 @@ export default function ShoppingModePage() {
     }
 
     const key = `${sessionId || ''}|${budgetId || ''}|${user?.id || ''}|${retryTick}`
-    if (user && initKeyRef.current !== key) {
+    if (user && workspaceReady && initKeyRef.current !== key) {
       initKeyRef.current = key
       init()
     }
     return () => unsubscribe()
-  }, [sessionId, budgetId, user?.id, retryTick])
+  }, [sessionId, budgetId, user?.id, retryTick, workspaceReady])
 
   // Al retomar por enlace puede haber en memoria otro presupuesto: siempre se carga el de la sesión
   useEffect(() => {
@@ -291,8 +300,8 @@ export default function ShoppingModePage() {
   const purchasedIds = new Set(purchaseItems.map((p) => p.budget_item_id).filter(Boolean))
   const pendingItems = budgetItems.filter((i) => !purchasedIds.has(i.id))
 
-  const q = norm(query)
-  const matches = (...fields) => !q || fields.some((f) => norm(f).includes(q))
+  const q = normalizeText(query)
+  const matches = (...fields) => !q || fields.some((f) => normalizeText(f).includes(q))
   const visiblePending = pendingItems.filter((i) => matches(i.product_name, i.categories?.name))
   const visiblePurchased = purchaseItems.filter((i) => matches(i.product_name, i.brand))
 
@@ -402,10 +411,15 @@ export default function ShoppingModePage() {
       return
     }
     setQuickAdding((prev) => new Set(prev).add(budgetItem.id))
-    const { data, error } = await addBudgetItemToCart(budgetItem)
+    const { data, error, existed } = await addBudgetItemToCart(budgetItem)
     setQuickAdding((prev) => { const next = new Set(prev); next.delete(budgetItem.id); return next })
     if (error) {
       enqueueSnackbar('Error al agregar el producto', { variant: 'error' })
+      return
+    }
+    // Ya lo había agregado alguien: no se ofrece Deshacer para no borrar esa fila
+    if (existed) {
+      enqueueSnackbar(`"${budgetItem.product_name}" ya estaba en el carrito`, { variant: 'info' })
       return
     }
     enqueueSnackbar(`"${budgetItem.product_name}" agregado`, {
@@ -848,6 +862,9 @@ export default function ShoppingModePage() {
         workspaceId={currentWorkspace?.id}
         products={products}
         categories={categories}
+        pendingItems={pendingItems}
+        cartItems={purchaseItems}
+        onEditExisting={(item) => { setAddItemDialog({ open: false, item: null }); setEditItemDialog({ open: true, item }) }}
         onClose={() => setAddItemDialog({ open: false, item: null })}
       />
 

@@ -8,6 +8,7 @@ import { useSnackbar } from 'notistack'
 import { useInventoryStore } from '../store/inventoryStore'
 import EmptyState from '@/shared/components/EmptyState'
 import { CATEGORY_ICONS } from '@/shared/constants/categoryIcons'
+import { normalizeText } from '@/shared/utils/text'
 import { CategoryIcon, ConfirmDialog, PrimaryAction, Section } from '@/shared/components/ui'
 import { FS, NUM } from '@/theme/tokens'
 
@@ -53,6 +54,7 @@ export default function CategoryManager({ workspaceId, isEditor, productCounts =
   }
 
   const nameError = nameTouched && !form.name.trim() ? 'Ingresa el nombre de la categoría.' : ''
+  const nameExists = Boolean(form.name.trim()) && categories.some((c) => c.id !== dialog.category?.id && normalizeText(c.name) === normalizeText(form.name))
 
   return (
     <Section
@@ -103,7 +105,7 @@ export default function CategoryManager({ workspaceId, isEditor, productCounts =
               onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
               onBlur={() => setNameTouched(true)}
               error={Boolean(nameError)}
-              helperText={nameError || ' '}
+              helperText={nameError || (nameExists ? 'Ya existe una categoría con este nombre.' : ' ')}
             />
             <TextField fullWidth label="Pasillo (opcional)" value={form.aisle} onChange={(e) => setForm((f) => ({ ...f, aisle: e.target.value }))} placeholder="ej: A1, Bebidas, Lácteos..." />
 

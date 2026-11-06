@@ -8,6 +8,7 @@ import { Inventory2, Close, QrCode2 } from '@mui/icons-material'
 import { useSnackbar } from 'notistack'
 import { useInventoryStore } from '../store/inventoryStore'
 import { UNITS } from '@/shared/constants/units'
+import { normalizeText } from '@/shared/utils/text'
 import { FS } from '@/theme/tokens'
 
 function SectionLabel({ children }) {
@@ -27,7 +28,7 @@ const validators = {
 const FIELD_ORDER = ['name', 'current_quantity', 'min_quantity']
 
 export default function ProductForm({ open, product, categories, workspaceId, userId, onClose }) {
-  const { createProduct, updateProduct } = useInventoryStore()
+  const { products, createProduct, updateProduct } = useInventoryStore()
   const { enqueueSnackbar } = useSnackbar()
   const isEdit = Boolean(product)
 
@@ -77,6 +78,7 @@ export default function ProductForm({ open, product, categories, workspaceId, us
   }
 
   const submitLabel = isEdit ? 'Guardar cambios' : 'Crear producto'
+  const nameExists = Boolean(form.name.trim()) && products.some((p) => p.id !== product?.id && normalizeText(p.name) === normalizeText(form.name))
   const selectedCategory = categories.find((c) => c.id === form.category_id)
   const unitAdornment = form.unit && (
     <InputAdornment position="end"><Typography sx={{ fontSize: FS.meta, color: 'text.secondary' }}>{form.unit}</Typography></InputAdornment>
@@ -118,8 +120,8 @@ export default function ProductForm({ open, product, categories, workspaceId, us
             value={form.name}
             onChange={set('name')}
             onBlur={blur('name')}
-            error={Boolean(fieldErrors.name)}
-            helperText={fieldErrors.name || ' '}
+            error={Boolean(fieldErrors.name) && !form.name.trim()}
+            helperText={form.name.trim() ? (nameExists ? 'Ya existe un producto con este nombre.' : ' ') : (fieldErrors.name || ' ')}
             inputRef={nameRef}
             placeholder="Ej: Leche entera, Jabón de manos…"
             autoFocus

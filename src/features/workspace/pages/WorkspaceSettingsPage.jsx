@@ -167,7 +167,13 @@ export default function WorkspaceSettingsPage() {
     return () => { cancelled = true }
   }, [currentWorkspace?.id, refreshSignal, retryTick])
 
-  const validateEmail = (v) => (EMAIL_RE.test(v.trim()) ? '' : 'Ingresa un email válido.')
+  const validateEmail = (v) => {
+    const email = v.trim().toLowerCase()
+    if (!EMAIL_RE.test(email)) return 'Ingresa un email válido.'
+    if (members.some((m) => m.profiles?.email?.toLowerCase() === email)) return 'Esta persona ya es miembro del hogar.'
+    if (invitations.some((i) => i.email?.toLowerCase() === email)) return 'Ya hay una invitación pendiente para este email.'
+    return ''
+  }
   const validateName = (v) => (v.trim() ? '' : 'Ingresa el nombre del hogar.')
 
   const handleInvite = async () => {
