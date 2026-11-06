@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import { Box, Button, ButtonBase, Card, CircularProgress, Collapse, IconButton, Tooltip, Typography, useTheme } from '@mui/material'
 import { Add, Done, ErrorOutlined, ExpandLess, ExpandMore, Warning } from '@mui/icons-material'
 import { FS, NUM } from '@/theme/tokens'
@@ -36,12 +37,23 @@ function BalanceIcon({ bal }) {
 }
 
 // ── Móvil y tablet: ticket fijo al alcance del pulgar ────────────────────────
-export function SpendDock({ totalSpent, budget, itemCount, expanded, onToggleExpanded, onAdd, onFinish, completing }) {
+// Informa su altura real (cambia al ampliarse) para que la lista reserve ese espacio y nunca quede tapada.
+export function SpendDock({ totalSpent, budget, itemCount, expanded, onToggleExpanded, onAdd, onFinish, completing, onHeightChange }) {
   const bal = useBalance(totalSpent, budget)
   const toggleLabel = expanded ? 'Reducir resumen del gasto' : 'Ampliar resumen del gasto'
+  const dockRef = useRef(null)
+
+  useEffect(() => {
+    const dock = dockRef.current
+    if (!dock || !onHeightChange) return undefined
+    const observer = new ResizeObserver(() => onHeightChange(dock.getBoundingClientRect().height))
+    observer.observe(dock)
+    return () => observer.disconnect()
+  }, [onHeightChange])
 
   return (
     <Box
+      ref={dockRef}
       component="aside"
       aria-label="Resumen del gasto"
       sx={{

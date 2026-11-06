@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import {
@@ -32,6 +32,8 @@ import { FS, NUM } from '@/theme/tokens'
 const COMPACT_KEY = 'shopping.headerCompact'
 const DENSITY_KEY = 'shopping.density'
 const SUGGESTIONS_MAX = 6
+// Separación entre el último producto y la barra del gasto
+const DOCK_GAP = 24
 const NO_CATEGORY = 'none'
 
 // Sin preferencia guardada, el celular arranca en vista compacta (más productos a la vista)
@@ -170,6 +172,19 @@ export default function ShoppingModePage() {
   const [headerCompact, setHeaderCompact] = useState(readCompact)
   const [density, setDensity] = useState(readDensity)
   const compact = density === 'compact'
+  const [dockHeight, setDockHeight] = useState(0)
+  const previousDockHeight = useRef(0)
+
+  // Si la barra del gasto crece estando al final de la lista, la vista sube lo mismo:
+  // así el último producto sigue a la vista sin tener que desplazarse.
+  useLayoutEffect(() => {
+    const previous = previousDockHeight.current
+    previousDockHeight.current = dockHeight
+    const growth = dockHeight - previous
+    if (previous === 0 || growth <= 0) return
+    const distanceToEnd = document.documentElement.scrollHeight - (window.scrollY + window.innerHeight)
+    if (distanceToEnd <= growth + 4) window.scrollBy(0, growth)
+  }, [dockHeight])
 
   const toggleDensity = () => {
     setDensity((d) => {
@@ -617,7 +632,7 @@ export default function ShoppingModePage() {
   )
 
   return (
-    <Box sx={{ minHeight: '100dvh', pb: isWide ? 3 : 'calc(112px + env(safe-area-inset-bottom, 0px))' }}>
+    <Box sx={{ minHeight: '100dvh', pb: isWide ? 3 : (dockHeight ? `${dockHeight + DOCK_GAP}px` : 'calc(112px + env(safe-area-inset-bottom, 0px))') }}>
       {/* ── Cabecera fija: qué se compra, quién está y el buscador ── */}
       <Box
         component="header"
@@ -798,6 +813,7 @@ export default function ShoppingModePage() {
           itemCount={purchaseItems.length}
           expanded={!headerCompact}
           onToggleExpanded={toggleHeaderCompact}
+          onHeightChange={setDockHeight}
           onAdd={openAdd}
           onFinish={openFinish}
           completing={completing}
