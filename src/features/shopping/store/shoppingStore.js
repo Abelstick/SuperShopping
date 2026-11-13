@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { supabase } from '@/lib/supabase'
+import { ensureAffected } from '@/shared/utils/supabaseResult'
 
 const UNIQUE_VIOLATION = '23505'
 const ITEM_SELECT = `*, profiles!purchase_items_purchased_by_fkey(id, full_name, avatar_url), categories(name, color)`
@@ -310,7 +311,7 @@ export const useShoppingStore = create((set, get) => ({
   },
 
   removePurchaseItem: async (id) => {
-    const { error } = await supabase.from('purchase_items').delete().eq('id', id)
+    const { error } = ensureAffected(await supabase.from('purchase_items').delete().eq('id', id).select('id'))
     if (!error) {
       set((s) => ({ purchaseItems: s.purchaseItems.filter((i) => i.id !== id) }))
       markCartChanged()
@@ -320,7 +321,7 @@ export const useShoppingStore = create((set, get) => ({
 
   removePurchaseItemsBulk: async (ids) => {
     if (!ids.length) return { error: null }
-    const { error } = await supabase.from('purchase_items').delete().in('id', ids)
+    const { error } = ensureAffected(await supabase.from('purchase_items').delete().in('id', ids).select('id'))
     if (!error) {
       set((s) => ({ purchaseItems: s.purchaseItems.filter((i) => !ids.includes(i.id)) }))
       markCartChanged()

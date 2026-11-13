@@ -11,6 +11,7 @@ import LoadErrorBanner from '@/shared/components/LoadErrorBanner'
 import { fmtMoney, fmtDate } from '@/shared/utils/format'
 import { CategoryIcon, ConfirmDialog, PageHeader, Panel, RowDivider, StatusPill } from '@/shared/components/ui'
 import { FS, NUM, reveal } from '@/theme/tokens'
+import { canEditRole } from '@/features/workspace/constants'
 
 
 // ── Page ──────────────────────────────────────────────────────────────────────
@@ -41,7 +42,7 @@ export default function PurchaseDetailPage() {
   }, [purchaseId, retryTick])
 
   // Editar y ajustar: owner y editor. Eliminar compras completas sigue siendo del owner (en la lista).
-  const canEdit = ['owner', 'editor'].includes(currentWorkspace?.my_role)
+  const canEdit = canEditRole(currentWorkspace?.my_role)
   const itemsSubtotal = purchaseItems.reduce((a, i) => a + (i.total_price || 0), 0)
   const total = currentPurchase?.total_amount || 0
 

@@ -5,14 +5,15 @@ import {
   Dialog, DialogTitle, DialogContent, DialogActions,
   Tab, Tabs, Alert, Divider, Select, FormControl, InputLabel, Skeleton, CircularProgress,
 } from '@mui/material'
-import { History, People, PersonAdd, MoreVert, Delete, Email, Settings, Schedule, SwapHoriz } from '@mui/icons-material'
+import { History, People, PersonAdd, MoreVert, Delete, Email, Settings, Schedule, SwapHoriz, Shield, Logout, Link as LinkIcon, Close } from '@mui/icons-material'
 import { useSnackbar } from 'notistack'
+import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/features/auth/store/authStore'
 import { useWorkspaceStore } from '../store/workspaceStore'
 import { useAppStore } from '@/store/appStore'
 import LoadErrorBanner from '@/shared/components/LoadErrorBanner'
 import { LOCALE, fmtDate } from '@/shared/utils/format'
-import { ROLE_LABELS, EMAIL_RE } from '../constants'
+import { ROLE_LABELS, ASSIGNABLE_ROLES, EMAIL_RE, canManageRole } from '../constants'
 import RoleChip from '../components/RoleChip'
 import { ConfirmDialog, PageHeader, RowDivider, Section, StatusPill } from '@/shared/components/ui'
 import { FS, reveal } from '@/theme/tokens'
@@ -81,17 +82,31 @@ function ActivityFeed({ workspaceId, members, fetchActivity }) {
   )
 }
 
-function MemberItem({ member, isOwner, currentUserId, onRoleChange, onRemove, last }) {
+const inviteLink = (token) => `${window.location.origin}/invite/${token}`
+
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); return true } catch { return false }
+}
+
+const ROLE_HINTS = {
+  admin: 'Gestiona miembros, invitaciones y datos del hogar, y puede eliminar contenido.',
+  editor: 'Gestiona inventario, presupuestos y compras.',
+  viewer: 'Solo puede ver la información del hogar.',
+}
+
+function MemberItem({ member, canManage, viewerIsOwner, currentUserId, onRoleChange, onRemove, onTransfer, last }) {
   const [anchorEl, setAnchorEl] = useState(null)
   const isSelf = member.profiles?.id === currentUserId
   const label = member.profiles?.full_name || member.profiles?.email
   const close = () => setAnchorEl(null)
+  // Al propietario no se le cambia el rol ni se le quita: solo él transfiere la propiedad
+  const showMenu = canManage && !isSelf && member.role !== 'owner'
 
   return (
     <Box>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, pl: { xs: 2, sm: 2.5 }, pr: { xs: 1, sm: 1.5 }, py: 1, minHeight: 64, flexWrap: { xs: 'wrap', sm: 'nowrap' } }}>
         <Avatar src={member.profiles?.avatar_url} alt={label} sx={{ width: 40, height: 40, bgcolor: 'action.selected', color: 'primary.main' }}>
-          {member.profiles?.full_name?.[0]?.toUpperCase()}
+          {label?.[0]?.toUpperCase()}
         </Avatar>
         <Box sx={{ flex: '1 1 140px', minWidth: 0 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
@@ -102,21 +117,26 @@ function MemberItem({ member, isOwner, currentUserId, onRoleChange, onRemove, la
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
           <RoleChip role={member.role} />
-          {isOwner && !isSelf && (
+          {showMenu && (
             <>
               <IconButton aria-label={`Acciones de ${label}`} onClick={(e) => setAnchorEl(e.currentTarget)} sx={{ color: 'text.secondary' }}>
                 <MoreVert fontSize="small" />
               </IconButton>
               <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={close}>
-                {['editor', 'viewer'].map((role) => (
+                {ASSIGNABLE_ROLES.map((role) => (
                   <MenuItem key={role} onClick={() => { close(); onRoleChange(member.profiles?.id, role) }} disabled={member.role === role}>
                     <ListItemIcon><SwapHoriz fontSize="small" /></ListItemIcon>
                     <ListItemText>Cambiar a {ROLE_LABELS[role]}</ListItemText>
                   </MenuItem>
                 ))}
+                {viewerIsOwner && (
+                  <MenuItem onClick={() => { close(); onTransfer(member) }}>
+                    <ListItemIcon><Shield fontSize="small" /></ListItemIcon><ListItemText>Hacer propietario</ListItemText>
+                  </MenuItem>
+                )}
                 <Divider sx={{ my: 0.5 }} />
                 <MenuItem onClick={() => { close(); onRemove(member) }}>
-                  <ListItemIcon><Delete fontSize="small" /></ListItemIcon><ListItemText>Eliminar</ListItemText>
+                  <ListItemIcon><Delete fontSize="small" /></ListItemIcon><ListItemText>Quitar del hogar</ListItemText>
                 </MenuItem>
               </Menu>
             </>
@@ -128,11 +148,45 @@ function MemberItem({ member, isOwner, currentUserId, onRoleChange, onRemove, la
   )
 }
 
+function InvitationItem({ invitation, canManage, onCopy, onCancel, last }) {
+  return (
+    <Box>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, pl: { xs: 2, sm: 2.5 }, pr: { xs: 1, sm: 1.5 }, py: 1, minHeight: 64, flexWrap: { xs: 'wrap', sm: 'nowrap' } }}>
+        <Avatar sx={{ width: 40, height: 40, bgcolor: 'action.hover', color: 'text.secondary' }}><Email /></Avatar>
+        <Box sx={{ flex: '1 1 160px', minWidth: 0 }}>
+          <Typography sx={{ fontSize: FS.body, fontWeight: 700 }} noWrap>{invitation.email}</Typography>
+          <Typography sx={{ fontSize: FS.meta, color: 'text.secondary', fontVariantNumeric: 'tabular-nums' }}>
+            Rol: {ROLE_LABELS[invitation.role]} • Expira: {fmtDate(invitation.expires_at)}
+          </Typography>
+        </Box>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
+          <StatusPill tone="warn" icon={Schedule}>Pendiente</StatusPill>
+          {canManage && (
+            <>
+              <IconButton aria-label={`Copiar enlace de invitación para ${invitation.email}`} onClick={() => onCopy(invitation)} sx={{ color: 'text.secondary' }}>
+                <LinkIcon fontSize="small" />
+              </IconButton>
+              <IconButton aria-label={`Cancelar invitación de ${invitation.email}`} onClick={() => onCancel(invitation)} sx={{ color: 'text.secondary' }}>
+                <Close fontSize="small" />
+              </IconButton>
+            </>
+          )}
+        </Box>
+      </Box>
+      {!last && <RowDivider />}
+    </Box>
+  )
+}
+
 export default function WorkspaceSettingsPage() {
+  const navigate = useNavigate()
   const { user } = useAuthStore()
-  const { currentWorkspace, members, invitations, fetchMembers, fetchInvitations, fetchActivity, updateMemberRole, removeMember, inviteMember, updateWorkspace } = useWorkspaceStore()
+  const {
+    currentWorkspace, members, invitations, fetchMembers, fetchInvitations, fetchActivity,
+    updateMemberRole, removeMember, inviteMember, cancelInvitation, updateWorkspace, transferOwnership, leaveWorkspace,
+  } = useWorkspaceStore()
   const refreshSignal = useAppStore((s) => s.refreshSignal)
-  const { enqueueSnackbar } = useSnackbar()
+  const { enqueueSnackbar, closeSnackbar } = useSnackbar()
   const [tab, setTab] = useState(0)
   const [inviteDialog, setInviteDialog] = useState(false)
   const [inviteForm, setInviteForm] = useState({ email: '', role: 'editor' })
@@ -142,7 +196,10 @@ export default function WorkspaceSettingsPage() {
   const [wsDraft, setWsDraft] = useState(null)
   const [nameError, setNameError] = useState('')
   const [removeConfirm, setRemoveConfirm] = useState(null)
-  const [removing, setRemoving] = useState(false)
+  const [transferConfirm, setTransferConfirm] = useState(null)
+  const [cancelConfirm, setCancelConfirm] = useState(null)
+  const [leaveConfirm, setLeaveConfirm] = useState(false)
+  const [busy, setBusy] = useState(false)
   const [membersReady, setMembersReady] = useState(false)
   const [loadError, setLoadError] = useState(null)
   const [retryTick, setRetryTick] = useState(0)
@@ -150,9 +207,9 @@ export default function WorkspaceSettingsPage() {
   const emailRef = useRef(null)
 
   const isOwner = currentWorkspace?.my_role === 'owner'
+  const canManage = canManageRole(currentWorkspace?.my_role)
   const wsForm = wsDraft ?? { name: currentWorkspace?.name || '', description: currentWorkspace?.description || '' }
 
-  // Mismas cargas de siempre; ahora se recoge el `{ error }` que ya devuelven
   useEffect(() => {
     if (!currentWorkspace) return
     let cancelled = false
@@ -176,30 +233,71 @@ export default function WorkspaceSettingsPage() {
   }
   const validateName = (v) => (v.trim() ? '' : 'Ingresa el nombre del hogar.')
 
+  const handleCopyLink = async (invitation) => {
+    const ok = await copyText(inviteLink(invitation.token))
+    enqueueSnackbar(ok ? 'Enlace copiado. Compártelo con la persona invitada.' : 'No se pudo copiar el enlace', { variant: ok ? 'success' : 'error' })
+  }
+
   const handleInvite = async () => {
     const err = validateEmail(inviteForm.email)
     setEmailError(err)
     if (err) { emailRef.current?.focus(); return }
     setSaving(true)
-    const { error } = await inviteMember(currentWorkspace.id, inviteForm.email, inviteForm.role, user.id)
+    const { data, error } = await inviteMember(currentWorkspace.id, inviteForm.email, inviteForm.role, user.id)
     setSaving(false)
-    if (error) enqueueSnackbar('Error al enviar invitación', { variant: 'error' })
-    else { enqueueSnackbar('Invitación enviada', { variant: 'success' }); setInviteDialog(false) }
+    if (error) { enqueueSnackbar(`Error al crear la invitación: ${error.message}`, { variant: 'error' }); return }
+    setInviteDialog(false)
+    // No se envían correos: la persona la ve en "Mis hogares" al entrar con ese email, o por el enlace
+    enqueueSnackbar('Invitación creada. La verá en Mis hogares al entrar con ese email.', {
+      variant: 'success',
+      action: (key) => (
+        <Button color="inherit" sx={{ fontWeight: 700 }} onClick={() => { closeSnackbar(key); handleCopyLink(data) }}>Copiar enlace</Button>
+      ),
+    })
   }
 
   const handleRoleChange = async (memberId, role) => {
     const { error } = await updateMemberRole(currentWorkspace.id, memberId, role)
-    if (error) enqueueSnackbar('Error al cambiar rol', { variant: 'error' })
+    if (error) enqueueSnackbar(`Error al cambiar rol: ${error.message}`, { variant: 'error' })
     else enqueueSnackbar('Rol actualizado', { variant: 'success' })
   }
 
   const handleRemoveMember = async () => {
-    setRemoving(true)
+    setBusy(true)
     const { error } = await removeMember(currentWorkspace.id, removeConfirm.profiles?.id)
-    setRemoving(false)
-    if (error) enqueueSnackbar('Error al eliminar miembro', { variant: 'error' })
-    else enqueueSnackbar('Miembro eliminado', { variant: 'success' })
+    setBusy(false)
+    if (error) enqueueSnackbar(`Error al quitar miembro: ${error.message}`, { variant: 'error' })
+    else enqueueSnackbar('Miembro quitado del hogar', { variant: 'success' })
     setRemoveConfirm(null)
+  }
+
+  const handleTransfer = async () => {
+    setBusy(true)
+    const { error } = await transferOwnership(currentWorkspace.id, transferConfirm.profiles?.id, user.id)
+    setBusy(false)
+    if (error) enqueueSnackbar(`No se pudo transferir: ${error.message}`, { variant: 'error' })
+    else enqueueSnackbar('Propiedad transferida. Ahora eres Administrador.', { variant: 'success' })
+    setTransferConfirm(null)
+  }
+
+  const handleCancelInvitation = async () => {
+    setBusy(true)
+    const { error } = await cancelInvitation(cancelConfirm.id, currentWorkspace.id)
+    setBusy(false)
+    if (error) enqueueSnackbar(`No se pudo cancelar: ${error.message}`, { variant: 'error' })
+    else enqueueSnackbar('Invitación cancelada', { variant: 'success' })
+    setCancelConfirm(null)
+  }
+
+  const handleLeave = async () => {
+    setBusy(true)
+    const name = currentWorkspace.name
+    const { error } = await leaveWorkspace(currentWorkspace.id, user.id)
+    setBusy(false)
+    setLeaveConfirm(false)
+    if (error) { enqueueSnackbar(`No se pudo salir: ${error.message}`, { variant: 'error' }); return }
+    enqueueSnackbar(`Saliste de "${name}"`, { variant: 'success' })
+    navigate('/workspaces')
   }
 
   const handleSaveWorkspace = async () => {
@@ -232,32 +330,48 @@ export default function WorkspaceSettingsPage() {
       </Tabs>
 
       {tab === 0 && (
-        <Card sx={{ p: { xs: 2, sm: 2.5 }, display: 'flex', flexDirection: 'column', gap: 2, maxWidth: 720 }}>
-          <Typography component="h2" sx={{ fontSize: FS.title, fontWeight: 700, lineHeight: 1.3 }}>Información del Hogar</Typography>
-          <TextField
-            fullWidth label="Nombre" value={wsForm.name} disabled={!isOwner} required={isOwner}
-            onChange={(e) => setWsDraft({ ...wsForm, name: e.target.value })}
-            onBlur={() => isOwner && setNameError(validateName(wsForm.name))}
-            error={Boolean(nameError)} helperText={nameError || ' '}
-            inputRef={nameRef}
-          />
-          <TextField fullWidth label="Descripción" value={wsForm.description} onChange={(e) => setWsDraft({ ...wsForm, description: e.target.value })} multiline rows={3} disabled={!isOwner} />
-          {isOwner && (
-            <Box>
-              <Button variant="contained" onClick={handleSaveWorkspace} disabled={saving}
-                startIcon={saving ? <CircularProgress size={16} color="inherit" /> : undefined}>
-                {saving ? 'Guardando...' : 'Guardar cambios'}
-              </Button>
-            </Box>
-          )}
-        </Card>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, maxWidth: 720 }}>
+          <Card sx={{ p: { xs: 2, sm: 2.5 }, display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <Typography component="h2" sx={{ fontSize: FS.title, fontWeight: 700, lineHeight: 1.3 }}>Información del Hogar</Typography>
+            <TextField
+              fullWidth label="Nombre" value={wsForm.name} disabled={!canManage} required={canManage}
+              onChange={(e) => setWsDraft({ ...wsForm, name: e.target.value })}
+              onBlur={() => canManage && setNameError(validateName(wsForm.name))}
+              error={Boolean(nameError)} helperText={nameError || ' '}
+              inputRef={nameRef}
+            />
+            <TextField fullWidth label="Descripción" value={wsForm.description} onChange={(e) => setWsDraft({ ...wsForm, description: e.target.value })} multiline rows={3} disabled={!canManage} />
+            {canManage && (
+              <Box>
+                <Button variant="contained" onClick={handleSaveWorkspace} disabled={saving}
+                  startIcon={saving ? <CircularProgress size={16} color="inherit" /> : undefined}>
+                  {saving ? 'Guardando...' : 'Guardar cambios'}
+                </Button>
+              </Box>
+            )}
+          </Card>
+
+          <Card sx={{ p: { xs: 2, sm: 2.5 }, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+            <Typography component="h2" sx={{ fontSize: FS.title, fontWeight: 700, lineHeight: 1.3 }}>Salir del hogar</Typography>
+            {isOwner ? (
+              <Typography sx={{ fontSize: FS.body, color: 'text.secondary' }}>
+                Eres el propietario. Para salir, primero haz propietario a otro miembro desde la pestaña Miembros, o elimina el hogar en Mis hogares.
+              </Typography>
+            ) : (
+              <>
+                <Typography sx={{ fontSize: FS.body, color: 'text.secondary' }}>Dejarás de ver el inventario, los presupuestos y las compras de este hogar. Para volver necesitarás una nueva invitación.</Typography>
+                <Box><Button color="error" variant="outlined" startIcon={<Logout />} onClick={() => setLeaveConfirm(true)}>Salir del hogar</Button></Box>
+              </>
+            )}
+          </Card>
+        </Box>
       )}
 
       {tab === 1 && (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
             <Typography component="h2" sx={{ fontSize: FS.title, fontWeight: 700, lineHeight: 1.3 }}>{members.length} Miembro{members.length !== 1 ? 's' : ''}</Typography>
-            {isOwner && (
+            {canManage && (
               <Button startIcon={<PersonAdd />} variant="contained" onClick={() => { setInviteForm({ email: '', role: 'editor' }); setEmailError(''); setInviteDialog(true) }}>
                 Invitar
               </Button>
@@ -277,29 +391,26 @@ export default function WorkspaceSettingsPage() {
               ))
             ) : (
               members.map((m, i) => (
-                <MemberItem key={m.id} member={m} isOwner={isOwner} currentUserId={user?.id} onRoleChange={handleRoleChange} onRemove={setRemoveConfirm} last={i === members.length - 1} />
+                <MemberItem
+                  key={m.id} member={m} canManage={canManage} viewerIsOwner={isOwner} currentUserId={user?.id}
+                  onRoleChange={handleRoleChange} onRemove={setRemoveConfirm} onTransfer={setTransferConfirm}
+                  last={i === members.length - 1}
+                />
               ))
             )}
           </Card>
 
           {invitations.length > 0 && (
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
               <Typography component="h3" sx={{ fontSize: FS.body, fontWeight: 700, color: 'text.secondary' }}>Invitaciones pendientes</Typography>
+              {canManage && (
+                <Typography sx={{ fontSize: FS.meta, color: 'text.secondary' }}>
+                  La persona invitada la verá en Mis hogares al entrar con ese email. También puedes copiar el enlace y enviárselo.
+                </Typography>
+              )}
               <Card>
                 {invitations.map((inv, i) => (
-                  <Box key={inv.id}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, px: { xs: 2, sm: 2.5 }, py: 1, minHeight: 64 }}>
-                      <Avatar sx={{ width: 40, height: 40, bgcolor: 'action.hover', color: 'text.secondary' }}><Email /></Avatar>
-                      <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-                        <Typography sx={{ fontSize: FS.body, fontWeight: 700 }} noWrap>{inv.email}</Typography>
-                        <Typography sx={{ fontSize: FS.meta, color: 'text.secondary', fontVariantNumeric: 'tabular-nums' }}>
-                          Rol: {ROLE_LABELS[inv.role]} • Expira: {fmtDate(inv.expires_at)}
-                        </Typography>
-                      </Box>
-                      <StatusPill tone="warn" icon={Schedule}>Pendiente</StatusPill>
-                    </Box>
-                    {i < invitations.length - 1 && <RowDivider />}
-                  </Box>
+                  <InvitationItem key={inv.id} invitation={inv} canManage={canManage} onCopy={handleCopyLink} onCancel={setCancelConfirm} last={i === invitations.length - 1} />
                 ))}
               </Card>
             </Box>
@@ -328,30 +439,65 @@ export default function WorkspaceSettingsPage() {
             <FormControl fullWidth>
               <InputLabel id="inv-role">Rol</InputLabel>
               <Select labelId="inv-role" value={inviteForm.role} label="Rol" onChange={(e) => setInviteForm((f) => ({ ...f, role: e.target.value }))}>
-                <MenuItem value="editor">Editor</MenuItem>
-                <MenuItem value="viewer">Lector</MenuItem>
+                {ASSIGNABLE_ROLES.map((role) => <MenuItem key={role} value={role}>{ROLE_LABELS[role]}</MenuItem>)}
               </Select>
             </FormControl>
+            <Typography sx={{ fontSize: FS.meta, color: 'text.secondary' }}>{ROLE_HINTS[inviteForm.role]}</Typography>
           </Box>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setInviteDialog(false)} disabled={saving}>Cancelar</Button>
           <Button variant="contained" onClick={handleInvite} disabled={saving}
             startIcon={saving ? <CircularProgress size={16} color="inherit" /> : undefined}>
-            {saving ? 'Enviando...' : 'Enviar invitación'}
+            {saving ? 'Creando...' : 'Crear invitación'}
           </Button>
         </DialogActions>
       </Dialog>
 
       <ConfirmDialog
         open={Boolean(removeConfirm)}
-        title="Eliminar miembro"
-        confirmLabel="Eliminar"
-        loading={removing}
+        title="Quitar miembro"
+        confirmLabel="Quitar"
+        loading={busy}
         onCancel={() => setRemoveConfirm(null)}
         onConfirm={handleRemoveMember}
       >
-        <Typography sx={{ fontSize: FS.body }}>¿Eliminar a <strong>{removeConfirm?.profiles?.full_name}</strong> del hogar?</Typography>
+        <Typography sx={{ fontSize: FS.body }}>¿Quitar a <strong>{removeConfirm?.profiles?.full_name || removeConfirm?.profiles?.email}</strong> del hogar?</Typography>
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={Boolean(transferConfirm)}
+        title="Transferir propiedad"
+        confirmLabel="Transferir"
+        loading={busy}
+        onCancel={() => setTransferConfirm(null)}
+        onConfirm={handleTransfer}
+      >
+        <Typography sx={{ fontSize: FS.body }}>
+          <strong>{transferConfirm?.profiles?.full_name || transferConfirm?.profiles?.email}</strong> será el nuevo propietario y podrá eliminar el hogar. Tú pasarás a ser Administrador.
+        </Typography>
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={Boolean(cancelConfirm)}
+        title="Cancelar invitación"
+        confirmLabel="Cancelar invitación"
+        loading={busy}
+        onCancel={() => setCancelConfirm(null)}
+        onConfirm={handleCancelInvitation}
+      >
+        <Typography sx={{ fontSize: FS.body }}>El enlace de <strong>{cancelConfirm?.email}</strong> dejará de funcionar.</Typography>
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={leaveConfirm}
+        title="Salir del hogar"
+        confirmLabel="Salir"
+        loading={busy}
+        onCancel={() => setLeaveConfirm(false)}
+        onConfirm={handleLeave}
+      >
+        <Typography sx={{ fontSize: FS.body }}>¿Salir de <strong>{currentWorkspace.name}</strong>?</Typography>
       </ConfirmDialog>
     </Box>
   )

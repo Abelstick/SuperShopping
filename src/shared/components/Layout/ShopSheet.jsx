@@ -6,6 +6,7 @@ import { fmtDate, fmtMoney } from '@/shared/utils/format'
 import { useBudgetStore } from '@/features/budgets/store/budgetStore'
 import { BudgetMeter, StatusPill } from '@/shared/components/ui'
 import { usePurchaseStore } from '@/features/purchases/store/purchaseStore'
+import { canEditRole } from '@/features/workspace/constants'
 
 // Elegir qué comprar: lista los presupuestos activos e indica cuál tiene una compra en curso.
 // La ruta /shopping/new retoma la sesión activa del presupuesto si existe, así que no hay riesgo de duplicarla.
@@ -25,7 +26,7 @@ export default function ShopSheet({ open, onClose, workspace, activeSessions, on
     return () => { cancelled = true }
   }, [open, workspaceId, fetchBudgets, fetchPurchases])
 
-  const isEditor = ['owner', 'editor'].includes(workspace?.my_role)
+  const isEditor = canEditRole(workspace?.my_role)
   const active = useMemo(() => budgets.filter((b) => b.status === 'active'), [budgets])
   const inProgress = useMemo(() => new Set(activeSessions.map((s) => s.budget_id)), [activeSessions])
   const spentById = useMemo(() => {

@@ -12,6 +12,7 @@ import DashboardPage from '@/features/dashboard/pages/DashboardPage'
 
 import WorkspacesPage from '@/features/workspace/pages/WorkspacesPage'
 import WorkspaceSettingsPage from '@/features/workspace/pages/WorkspaceSettingsPage'
+import InvitePage from '@/features/workspace/pages/InvitePage'
 
 import InventoryPage from '@/features/inventory/pages/InventoryPage'
 
@@ -51,6 +52,7 @@ export const router = createBrowserRouter([
 
       { path: 'workspaces', element: <WorkspacesPage /> },
       { path: 'workspace/settings', element: <WorkspaceSettingsPage /> },
+      { path: 'invite/:token', element: <InvitePage /> },
 
       { path: 'inventory', element: <InventoryPage /> },
 

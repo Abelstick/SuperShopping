@@ -25,6 +25,7 @@ import ProductForm from '../components/ProductForm'
 import CategoryManager from '../components/CategoryManager'
 import ProductHistoryDrawer from '../components/ProductHistoryDrawer'
 import { FS, NUM, reveal } from '@/theme/tokens'
+import { canEditRole, canManageRole } from '@/features/workspace/constants'
 
 const STATUS_FILTERS = [
   { key: 'all', label: 'Todos' },
@@ -92,9 +93,11 @@ function ProductActionsMenu({ product, anchorEl, onClose, onEdit, onHistory, onD
           <ListItemIcon><Visibility fontSize="small" /></ListItemIcon><ListItemText>Reactivar</ListItemText>
         </MenuItem>
       )}
-      <MenuItem onClick={run(onDelete)}>
-        <ListItemIcon><DeleteForever fontSize="small" /></ListItemIcon><ListItemText>Eliminar</ListItemText>
-      </MenuItem>
+      {onDelete && (
+        <MenuItem onClick={run(onDelete)}>
+          <ListItemIcon><DeleteForever fontSize="small" /></ListItemIcon><ListItemText>Eliminar</ListItemText>
+        </MenuItem>
+      )}
     </Menu>
   )
 }
@@ -282,7 +285,9 @@ export default function InventoryPage() {
   }, [currentWorkspace?.id, refreshSignal, retryTick])
 
   const filtered = getFilteredProducts()
-  const isEditor = ['owner', 'editor'].includes(currentWorkspace?.my_role)
+  const isEditor = canEditRole(currentWorkspace?.my_role)
+  // Eliminar productos y categorías es de propietario y administradores (los editores desactivan)
+  const canDelete = canManageRole(currentWorkspace?.my_role)
   const activeCount = products.filter((p) => p.is_active).length
   const lowCount = products.filter((p) => p.is_active && p.current_quantity <= p.min_quantity && p.min_quantity > 0).length
   const productCounts = useMemo(() => {
@@ -335,7 +340,7 @@ export default function InventoryPage() {
     onEdit: () => setProductDialog({ open: true, product: p }),
     onDeactivate: () => setDeactivateConfirm(p),
     onReactivate: () => handleReactivate(p),
-    onDelete: () => setDeleteConfirm(p),
+    onDelete: canDelete ? () => setDeleteConfirm(p) : undefined,
     onHistory: () => setHistoryDrawer({ open: true, product: p }),
   })
 
@@ -488,6 +493,7 @@ export default function InventoryPage() {
           <CategoryManager
             workspaceId={currentWorkspace?.id}
             isEditor={isEditor}
+            canDelete={canDelete}
             productCounts={productCounts}
             onOpenCategory={(id) => { setFilters({ ...NO_FILTERS, categoryId: id }); setTab(0) }}
           />

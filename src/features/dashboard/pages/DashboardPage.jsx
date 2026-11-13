@@ -24,6 +24,7 @@ import LoadErrorBanner from '@/shared/components/LoadErrorBanner'
 import { BudgetMeter, CategoryIcon, ChartTooltip, ConfirmDialog, NameList, PageHeader, Panel, RankBar, RowDivider, Section, StatGrid, StatusPill } from '@/shared/components/ui'
 import { LOCALE, fmtMoney, fmtDate, fmtMonth } from '@/shared/utils/format'
 import { FS, NUM, reveal } from '@/theme/tokens'
+import { canEditRole } from '@/features/workspace/constants'
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
@@ -276,7 +277,7 @@ export default function DashboardPage() {
   const hasUserData  = spendingByUser.length > 0
   const primaryColor = theme.vars.palette.primary.main
   const loading      = invLoading || budgLoading || purchLoading
-  const isEditor     = ['owner', 'editor'].includes(currentWorkspace?.my_role)
+  const isEditor     = canEditRole(currentWorkspace?.my_role)
 
   // Estado por dato (skeleton solo mientras no hay nada que mostrar en listas y gráficos)
   const purchListLoading = purchLoading && recentPurchases.length === 0

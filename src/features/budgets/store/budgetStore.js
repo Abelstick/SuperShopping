@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { supabase } from '@/lib/supabase'
+import { ensureAffected } from '@/shared/utils/supabaseResult'
 
 export const useBudgetStore = create((set, get) => ({
   budgets: [],
@@ -49,7 +50,7 @@ export const useBudgetStore = create((set, get) => ({
   },
 
   deleteBudget: async (id) => {
-    const { error } = await supabase.from('budgets').delete().eq('id', id)
+    const { error } = ensureAffected(await supabase.from('budgets').delete().eq('id', id).select('id'))
     if (!error) set((s) => ({ budgets: s.budgets.filter((b) => b.id !== id) }))
     return { error }
   },

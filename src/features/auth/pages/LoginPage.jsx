@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { Link as RouterLink, useNavigate } from 'react-router-dom'
+import { Link as RouterLink, useLocation, useNavigate } from 'react-router-dom'
 import {
   Box, TextField, Button, Typography, Link, InputAdornment, Alert, Divider, CircularProgress,
 } from '@mui/material'
@@ -16,6 +16,10 @@ const isCredentialError = (err) =>
 
 export default function LoginPage() {
   const navigate = useNavigate()
+  const location = useLocation()
+  // Vuelve a donde se quería ir antes de iniciar sesión (p. ej. un enlace de invitación)
+  const from = location.state?.from
+  const returnTo = from?.pathname ? `${from.pathname}${from.search ?? ''}` : '/'
   const { signIn } = useAuthStore()
   const { enqueueSnackbar } = useSnackbar()
   const [form, setForm] = useState({ email: '', password: '' })
@@ -44,7 +48,7 @@ export default function LoginPage() {
     const { error: err } = await signIn(form.email, form.password)
     setLoading(false)
     if (err) setError(isCredentialError(err) ? 'Email o contraseña incorrectos.' : err.message)
-    else { enqueueSnackbar('Bienvenido de vuelta', { variant: 'success' }); navigate('/') }
+    else { enqueueSnackbar('Bienvenido de vuelta', { variant: 'success' }); navigate(returnTo, { replace: true }) }
   }
 
   return (

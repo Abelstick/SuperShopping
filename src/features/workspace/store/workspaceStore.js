@@ -1,15 +1,25 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { supabase } from '@/lib/supabase'
+import { ensureAffected } from '@/shared/utils/supabaseResult'
+
+const initialState = {
+  workspaces: [],
+  currentWorkspace: null,
+  members: [],
+  invitations: [],
+  // Invitaciones recibidas por el usuario actual
+  myInvitations: [],
+  loading: false,
+}
 
 export const useWorkspaceStore = create(
   persist(
     (set, get) => ({
-      workspaces: [],
-      currentWorkspace: null,
-      members: [],
-      invitations: [],
-      loading: false,
+      ...initialState,
+
+      // Al cerrar sesión: el siguiente usuario no debe heredar el hogar ni el rol del anterior
+      reset: () => set({ ...initialState }),
 
       setCurrentWorkspace: (workspace) => set({ currentWorkspace: workspace }),
 
@@ -29,20 +39,17 @@ export const useWorkspaceStore = create(
             .eq('user_id', userId)
 
           if (!error && data) {
-            const workspaces = data.map((d) => ({
-              ...d.workspaces,
-              my_role: d.role,
-              joined_at: d.joined_at,
-            }))
-            set({ workspaces })
-
+            const workspaces = data
+              .filter((d) => d.workspaces)
+              .map((d) => ({
+                ...d.workspaces,
+                my_role: d.role,
+                joined_at: d.joined_at,
+              }))
+            // Si el hogar guardado ya no está (te quitaron, lo eliminaron o es de otra cuenta), se cambia
             const { currentWorkspace } = get()
-            if (!currentWorkspace && workspaces.length > 0) {
-              set({ currentWorkspace: workspaces[0] })
-            } else if (currentWorkspace) {
-              const updated = workspaces.find((w) => w.id === currentWorkspace.id)
-              if (updated) set({ currentWorkspace: updated })
-            }
+            const updated = currentWorkspace && workspaces.find((w) => w.id === currentWorkspace.id)
+            set({ workspaces, currentWorkspace: updated || workspaces[0] || null })
           }
           return { error }
         } finally {
@@ -65,7 +72,7 @@ export const useWorkspaceStore = create(
       updateWorkspace: async (id, updates) => {
         const { data, error } = await supabase
           .from('workspaces')
-          .update({ ...updates, updated_at: new Date().toISOString() })
+          .update({ name: updates.name, description: updates.description, updated_at: new Date().toISOString() })
           .eq('id', id)
           .select()
           .single()
@@ -79,17 +86,8 @@ export const useWorkspaceStore = create(
       },
 
       deleteWorkspace: async (id, userId) => {
-        const { error } = await supabase.from('workspaces').delete().eq('id', id)
-        if (!error) {
-          set((s) => {
-            const remaining = s.workspaces.filter((w) => w.id !== id)
-            return {
-              workspaces: remaining,
-              currentWorkspace: s.currentWorkspace?.id === id ? (remaining[0] || null) : s.currentWorkspace,
-            }
-          })
-          await get().fetchWorkspaces(userId)
-        }
+        const { error } = ensureAffected(await supabase.from('workspaces').delete().eq('id', id).select('id'))
+        if (!error) await get().fetchWorkspaces(userId)
         return { error }
       },
 
@@ -118,22 +116,45 @@ export const useWorkspaceStore = create(
       },
 
       updateMemberRole: async (workspaceId, userId, role) => {
-        const { error } = await supabase
+        const { error } = ensureAffected(await supabase
           .from('workspace_members')
           .update({ role })
           .eq('workspace_id', workspaceId)
           .eq('user_id', userId)
+          .select('id'))
         if (!error) await get().fetchMembers(workspaceId)
         return { error }
       },
 
       removeMember: async (workspaceId, userId) => {
-        const { error } = await supabase
+        const { error } = ensureAffected(await supabase
           .from('workspace_members')
           .delete()
           .eq('workspace_id', workspaceId)
           .eq('user_id', userId)
+          .select('id'))
         if (!error) await get().fetchMembers(workspaceId)
+        return { error }
+      },
+
+      // Salir de un hogar propio (no aplica al propietario: debe transferirlo antes)
+      leaveWorkspace: async (workspaceId, userId) => {
+        const { error } = ensureAffected(await supabase
+          .from('workspace_members')
+          .delete()
+          .eq('workspace_id', workspaceId)
+          .eq('user_id', userId)
+          .select('id'))
+        if (!error) await get().fetchWorkspaces(userId)
+        return { error }
+      },
+
+      transferOwnership: async (workspaceId, newOwnerId, userId) => {
+        const { error } = await supabase.rpc('transfer_workspace_ownership', {
+          p_workspace_id: workspaceId,
+          p_new_owner_id: newOwnerId,
+        })
+        if (!error) await Promise.all([get().fetchMembers(workspaceId), get().fetchWorkspaces(userId)])
         return { error }
       },
 
@@ -143,6 +164,8 @@ export const useWorkspaceStore = create(
           .select(`*, profiles!workspace_invitations_invited_by_fkey(full_name, email)`)
           .eq('workspace_id', workspaceId)
           .eq('status', 'pending')
+          .gt('expires_at', new Date().toISOString())
+          .order('created_at', { ascending: false })
 
         if (!error) set({ invitations: data || [] })
         return { error }
@@ -151,36 +174,44 @@ export const useWorkspaceStore = create(
       inviteMember: async (workspaceId, email, role, invitedBy) => {
         const { data, error } = await supabase
           .from('workspace_invitations')
-          .insert({ workspace_id: workspaceId, email, role, invited_by: invitedBy })
+          .insert({ workspace_id: workspaceId, email: email.trim().toLowerCase(), role, invited_by: invitedBy })
           .select()
           .single()
         if (!error) await get().fetchInvitations(workspaceId)
         return { data, error }
       },
 
-      acceptInvitation: async (token, userId) => {
-        const { data: inv, error: fetchErr } = await supabase
+      cancelInvitation: async (invitationId, workspaceId) => {
+        const { error } = ensureAffected(await supabase
           .from('workspace_invitations')
-          .select('*')
-          .eq('token', token)
-          .eq('status', 'pending')
-          .single()
+          .delete()
+          .eq('id', invitationId)
+          .select('id'))
+        if (!error) await get().fetchInvitations(workspaceId)
+        return { error }
+      },
 
-        if (fetchErr || !inv) return { error: fetchErr || new Error('Invitación no encontrada') }
-        if (new Date(inv.expires_at) < new Date()) {
-          await supabase.from('workspace_invitations').update({ status: 'expired' }).eq('id', inv.id)
-          return { error: new Error('La invitación ha expirado') }
-        }
+      fetchMyInvitations: async () => {
+        const { data, error } = await supabase.rpc('get_my_invitations')
+        if (!error) set({ myInvitations: data || [] })
+        return { data: data || [], error }
+      },
 
-        const { error: memberErr } = await supabase
-          .from('workspace_members')
-          .insert({ workspace_id: inv.workspace_id, user_id: userId, role: inv.role })
+      // Une al usuario al hogar de la invitación y lo deja como hogar activo
+      acceptInvitation: async (token, userId) => {
+        const { data: workspaceId, error } = await supabase.rpc('accept_workspace_invitation', { p_token: token })
+        if (error) return { error }
+        await get().fetchWorkspaces(userId)
+        const joined = get().workspaces.find((w) => w.id === workspaceId)
+        if (joined) set({ currentWorkspace: joined })
+        await get().fetchMyInvitations()
+        return { data: joined ?? null, error: null }
+      },
 
-        if (!memberErr) {
-          await supabase.from('workspace_invitations').update({ status: 'accepted' }).eq('id', inv.id)
-          await get().fetchWorkspaces(userId)
-        }
-        return { error: memberErr }
+      declineInvitation: async (token) => {
+        const { error } = await supabase.rpc('decline_workspace_invitation', { p_token: token })
+        if (!error) await get().fetchMyInvitations()
+        return { error }
       },
     }),
     {

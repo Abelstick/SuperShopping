@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { supabase } from '@/lib/supabase'
+import { useWorkspaceStore } from '@/features/workspace/store/workspaceStore'
 
 export const useAuthStore = create((set, get) => ({
   user: null,
@@ -14,6 +15,9 @@ export const useAuthStore = create((set, get) => ({
     if (session?.user) await get().fetchProfile(session.user.id)
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      // Cambió la cuenta (o se cerró la sesión en otra pestaña): no se hereda el hogar anterior
+      const previousId = get().user?.id
+      if (previousId && previousId !== session?.user?.id) useWorkspaceStore.getState().reset()
       set({ session, user: session?.user ?? null })
       if (session?.user) get().fetchProfile(session.user.id)
       else set({ profile: null })
@@ -80,6 +84,7 @@ export const useAuthStore = create((set, get) => ({
 
   signOut: async () => {
     await supabase.auth.signOut()
+    useWorkspaceStore.getState().reset()
     set({ user: null, profile: null, session: null })
   },
 

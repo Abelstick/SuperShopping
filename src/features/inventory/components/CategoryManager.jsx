@@ -15,7 +15,7 @@ import { FS, NUM } from '@/theme/tokens'
 const PRESET_COLORS = ['#f44336', '#e91e63', '#9c27b0', '#3f51b5', '#2196f3', '#03a9f4', '#009688', '#4caf50', '#8bc34a', '#ffeb3b', '#ff9800', '#795548']
 const EMPTY_FORM = { name: '', color: '#2196F3', aisle: '', icon: 'Category' }
 
-export default function CategoryManager({ workspaceId, isEditor, productCounts = {}, onOpenCategory }) {
+export default function CategoryManager({ workspaceId, isEditor, canDelete = false, productCounts = {}, onOpenCategory }) {
   const { categories, createCategory, updateCategory, deleteCategory } = useInventoryStore()
   const { enqueueSnackbar } = useSnackbar()
   const [dialog, setDialog] = useState({ open: false, category: null })
@@ -86,7 +86,7 @@ export default function CategoryManager({ workspaceId, isEditor, productCounts =
                 {isEditor && (
                   <Box sx={{ display: 'flex', flexShrink: 0, pr: 0.5 }}>
                     <Tooltip title="Editar"><IconButton aria-label={`Editar categoría ${c.name}`} onClick={() => openEdit(c)} sx={{ color: 'text.secondary' }}><Edit fontSize="small" /></IconButton></Tooltip>
-                    <Tooltip title="Eliminar"><IconButton aria-label={`Eliminar categoría ${c.name}`} onClick={() => setDeleteConfirm(c)} sx={{ color: 'text.secondary' }}><Delete fontSize="small" /></IconButton></Tooltip>
+                    {canDelete && <Tooltip title="Eliminar"><IconButton aria-label={`Eliminar categoría ${c.name}`} onClick={() => setDeleteConfirm(c)} sx={{ color: 'text.secondary' }}><Delete fontSize="small" /></IconButton></Tooltip>}
                   </Box>
                 )}
               </Card>

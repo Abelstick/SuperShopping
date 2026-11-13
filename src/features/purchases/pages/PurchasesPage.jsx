@@ -11,6 +11,7 @@ import EmptyState from '@/shared/components/EmptyState'
 import { ConfirmDialog, PageHeader, RowDivider, StatusPill } from '@/shared/components/ui'
 import { LOCALE, fmtMoney, fmtDate, parseDay } from '@/shared/utils/format'
 import { FS, NUM, reveal } from '@/theme/tokens'
+import { canManageRole } from '@/features/workspace/constants'
 
 function exportPurchasesCSV(purchases) {
   const header = ['Fecha', 'Nombre', 'Tienda', 'Total (S/)', 'Presupuesto', 'Ejecutado por']
@@ -116,7 +117,7 @@ export default function PurchasesPage() {
     setDeleteConfirm(null)
   }
 
-  const isOwner = currentWorkspace?.my_role === 'owner'
+  const isOwner = canManageRole(currentWorkspace?.my_role)
   const groups = groupByMonth(purchases)
   const totalSpent = purchases.reduce((a, p) => a + (p.total_amount || 0), 0)
   const showSkeleton = loading && purchases.length === 0

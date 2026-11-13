@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
 import {
-  Avatar, Box, ButtonBase, Divider, IconButton, Menu, MenuItem, Typography, useMediaQuery, useTheme,
+  Avatar, Box, Button, ButtonBase, Divider, IconButton, Menu, MenuItem, Typography, useMediaQuery, useTheme,
 } from '@mui/material'
-import { Logout, Person, Settings } from '@mui/icons-material'
+import { Logout, MailOutlined, Person, Settings } from '@mui/icons-material'
 import { useAuthStore } from '@/features/auth/store/authStore'
 import { useWorkspaceStore } from '@/features/workspace/store/workspaceStore'
 import { useShoppingStore } from '@/features/shopping/store/shoppingStore'
@@ -28,7 +28,7 @@ export default function AppLayout() {
   const isPhone = useMediaQuery(theme.breakpoints.down('sm'), { noSsr: true })
   const isDesktop = useMediaQuery(theme.breakpoints.up('md'), { noSsr: true })
   const { user, profile, signOut } = useAuthStore()
-  const { currentWorkspace, fetchWorkspaces } = useWorkspaceStore()
+  const { currentWorkspace, fetchWorkspaces, myInvitations, fetchMyInvitations } = useWorkspaceStore()
   const activeSessions = useShoppingStore((s) => s.activeSessions)
   const fetchActiveSessions = useShoppingStore((s) => s.fetchActiveSessions)
   const sidebarOpen = useAppStore((s) => s.sidebarOpen)
@@ -42,9 +42,12 @@ export default function AppLayout() {
   const immersive = pathname.startsWith('/shopping/')
   const workspaceId = currentWorkspace?.id
 
+  // También al volver a la pestaña: así se notan cambios de rol, expulsiones e invitaciones nuevas
   useEffect(() => {
-    if (user) fetchWorkspaces(user.id)
-  }, [user?.id])
+    if (!user) return
+    fetchWorkspaces(user.id)
+    fetchMyInvitations()
+  }, [user?.id, refreshSignal])
 
   // Se revisa al cambiar de pantalla: así el aviso desaparece al finalizar una compra
   useEffect(() => {
@@ -121,6 +124,23 @@ export default function AppLayout() {
         >
           {/* En el Dashboard, "Próximas compras" ya ofrece retomarla */}
           {pathname !== '/' && <ActiveShoppingBanner sessions={activeSessions} onResume={(id) => navigate(`/shopping/${id}`)} />}
+          {myInvitations.length > 0 && pathname !== '/workspaces' && !pathname.startsWith('/invite/') && (
+            <Box
+              role="status"
+              sx={{
+                display: 'flex', alignItems: 'center', gap: 1, pl: 1.5, pr: 0.5, py: 0.25, mb: { xs: 1.5, sm: 3 }, minHeight: 52,
+                borderRadius: '12px', bgcolor: 'action.selected', color: 'primary.main',
+              }}
+            >
+              <MailOutlined sx={{ fontSize: 22, flexShrink: 0 }} />
+              <Typography sx={{ flexGrow: 1, minWidth: 0, fontSize: FS.body, fontWeight: 700, color: 'text.primary', lineHeight: 1.3 }}>
+                {myInvitations.length === 1
+                  ? `Te invitaron a "${myInvitations[0].workspace_name}"`
+                  : `Tienes ${myInvitations.length} invitaciones a hogares`}
+              </Typography>
+              <Button variant="contained" onClick={() => navigate('/workspaces')} sx={{ flexShrink: 0 }}>Ver</Button>
+            </Box>
+          )}
           <Outlet />
         </Box>
       </Box>

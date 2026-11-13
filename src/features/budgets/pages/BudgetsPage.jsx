@@ -22,6 +22,7 @@ import { fmtMoney, fmtDate, fmtMonth } from '@/shared/utils/format'
 import BudgetForm from '../components/BudgetForm'
 import BudgetStatusChip from '../components/BudgetStatusChip'
 import { FS, NUM, reveal } from '@/theme/tokens'
+import { canEditRole, canManageRole } from '@/features/workspace/constants'
 
 // ── Resumen: lo que queda, y de dónde sale ───────────────────────────────────
 // Déficit = tomate con signo; el resto es neutro
@@ -195,10 +196,12 @@ function BudgetCard({ budget, isEditor, onEdit, onDelete, onActivate, onDuplicat
               <MenuItem onClick={() => { close(); onDuplicate() }}>
                 <ListItemIcon><ContentCopy fontSize="small" /></ListItemIcon><ListItemText>Duplicar</ListItemText>
               </MenuItem>
-              <Divider sx={{ my: 0.5 }} />
-              <MenuItem onClick={() => { close(); onDelete() }}>
-                <ListItemIcon><Delete fontSize="small" /></ListItemIcon><ListItemText>Eliminar</ListItemText>
-              </MenuItem>
+              {onDelete && <Divider sx={{ my: 0.5 }} />}
+              {onDelete && (
+                <MenuItem onClick={() => { close(); onDelete() }}>
+                  <ListItemIcon><Delete fontSize="small" /></ListItemIcon><ListItemText>Eliminar</ListItemText>
+                </MenuItem>
+              )}
             </Menu>
           </>
         )}
@@ -299,7 +302,9 @@ export default function BudgetsPage() {
     else enqueueSnackbar('Presupuesto duplicado como borrador', { variant: 'success' })
   }
 
-  const isEditor = ['owner', 'editor'].includes(currentWorkspace?.my_role)
+  const isEditor = canEditRole(currentWorkspace?.my_role)
+  // Eliminar presupuestos es de propietario y administradores
+  const canDelete = canManageRole(currentWorkspace?.my_role)
   const active = budgets.filter((b) => b.status === 'active')
   const rest = budgets.filter((b) => b.status !== 'active')
   const showSkeleton = loading && budgets.length === 0
@@ -316,7 +321,7 @@ export default function BudgetsPage() {
     onOpen: () => navigate(`/budgets/${b.id}`),
     onShop: () => { const sess = sessionByBudget.get(b.id); navigate(sess ? `/shopping/${sess.id}` : `/shopping/new?budgetId=${b.id}`) },
     onEdit: () => setFormDialog({ open: true, budget: b }),
-    onDelete: () => setDeleteConfirm(b),
+    onDelete: canDelete ? () => setDeleteConfirm(b) : undefined,
     onActivate: () => handleActivate(b),
     onDuplicate: () => handleDuplicate(b),
   })

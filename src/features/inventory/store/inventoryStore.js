@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { supabase } from '@/lib/supabase'
+import { ensureAffected } from '@/shared/utils/supabaseResult'
 
 export const useInventoryStore = create((set, get) => ({
   products: [],
@@ -42,7 +43,7 @@ export const useInventoryStore = create((set, get) => ({
   },
 
   deleteCategory: async (id) => {
-    const { error } = await supabase.from('categories').delete().eq('id', id)
+    const { error } = ensureAffected(await supabase.from('categories').delete().eq('id', id).select('id'))
     if (!error) set((s) => ({ categories: s.categories.filter((c) => c.id !== id) }))
     return { error }
   },
@@ -133,7 +134,7 @@ export const useInventoryStore = create((set, get) => ({
   },
 
   hardDeleteProduct: async (id) => {
-    const { error } = await supabase.from('products').delete().eq('id', id)
+    const { error } = ensureAffected(await supabase.from('products').delete().eq('id', id).select('id'))
     if (!error) set((s) => ({ products: s.products.filter((p) => p.id !== id) }))
     return { error }
   },

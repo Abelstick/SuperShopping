@@ -14,6 +14,8 @@ import { useNavigate } from 'react-router-dom'
 import LoadErrorBanner from '@/shared/components/LoadErrorBanner'
 import EmptyState from '@/shared/components/EmptyState'
 import RoleChip from '../components/RoleChip'
+import ReceivedInvitations from '../components/ReceivedInvitations'
+import { canManageRole } from '../constants'
 import { ConfirmDialog, PageHeader, PrimaryAction } from '@/shared/components/ui'
 import { FS, reveal } from '@/theme/tokens'
 
@@ -32,6 +34,7 @@ function OwnerLine({ workspace }) {
 function WorkspaceCard({ workspace, isCurrent, onSelect, onEdit, onDelete }) {
   const [anchorEl, setAnchorEl] = useState(null)
   const isOwner = workspace.my_role === 'owner'
+  const canManage = canManageRole(workspace.my_role)
   const close = () => setAnchorEl(null)
 
   return (
@@ -44,7 +47,7 @@ function WorkspaceCard({ workspace, isCurrent, onSelect, onEdit, onDelete }) {
           <Typography component="h2" sx={{ fontSize: FS.title, fontWeight: 700, lineHeight: 1.3, letterSpacing: '-0.01em' }} noWrap>{workspace.name}</Typography>
           <Box sx={{ mt: 0.5 }}><RoleChip role={workspace.my_role} /></Box>
         </Box>
-        {isOwner && (
+        {canManage && (
           <>
             <IconButton aria-label={`Acciones de ${workspace.name}`} onClick={(e) => setAnchorEl(e.currentTarget)} sx={{ flexShrink: 0, mt: -0.75, mr: -1, color: 'text.secondary' }}>
               <MoreVert fontSize="small" />
@@ -53,9 +56,11 @@ function WorkspaceCard({ workspace, isCurrent, onSelect, onEdit, onDelete }) {
               <MenuItem onClick={() => { close(); onEdit(workspace) }}>
                 <ListItemIcon><Edit fontSize="small" /></ListItemIcon><ListItemText>Editar</ListItemText>
               </MenuItem>
-              <MenuItem onClick={() => { close(); onDelete(workspace) }}>
-                <ListItemIcon><Delete fontSize="small" /></ListItemIcon><ListItemText>Eliminar</ListItemText>
-              </MenuItem>
+              {isOwner && (
+                <MenuItem onClick={() => { close(); onDelete(workspace) }}>
+                  <ListItemIcon><Delete fontSize="small" /></ListItemIcon><ListItemText>Eliminar</ListItemText>
+                </MenuItem>
+              )}
             </Menu>
           </>
         )}
@@ -82,7 +87,7 @@ const GRID = { display: 'grid', gap: 1.5, gridTemplateColumns: 'repeat(auto-fill
 export default function WorkspacesPage() {
   const navigate = useNavigate()
   const { user } = useAuthStore()
-  const { workspaces, currentWorkspace, loading, fetchWorkspaces, createWorkspace, updateWorkspace, deleteWorkspace, setCurrentWorkspace } = useWorkspaceStore()
+  const { workspaces, currentWorkspace, loading, myInvitations, fetchWorkspaces, fetchMyInvitations, createWorkspace, updateWorkspace, deleteWorkspace, setCurrentWorkspace } = useWorkspaceStore()
   const { enqueueSnackbar } = useSnackbar()
 
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -100,6 +105,7 @@ export default function WorkspacesPage() {
   useEffect(() => {
     if (!user) return
     let cancelled = false
+    fetchMyInvitations()
     fetchWorkspaces(user.id)
       .then((r) => { if (!cancelled) setLoadError(r?.error ? { message: r.error.message || 'Sin detalle del servidor' } : null) })
       .catch((e) => { if (!cancelled) setLoadError({ message: e?.message || 'Sin detalle del servidor' }) })
@@ -164,12 +170,21 @@ export default function WorkspacesPage() {
         <LoadErrorBanner message={loadError.message} onRetry={() => { setLoadError(null); setRetryTick((t) => t + 1) }} />
       )}
 
+      {myInvitations.length > 0 && (
+        <Box {...reveal(1)} sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+          <Typography component="h2" sx={{ fontSize: FS.body, fontWeight: 700, color: 'text.secondary' }}>
+            Invitaciones recibidas
+          </Typography>
+          <ReceivedInvitations invitations={myInvitations} onAccepted={() => navigate('/')} />
+        </Box>
+      )}
+
       <Box {...reveal(2)}>
         {showSkeleton ? (
           <Box sx={GRID}>
             {[1, 2, 3].map((i) => <Skeleton key={i} variant="rectangular" height={200} sx={{ borderRadius: '16px' }} />)}
           </Box>
-        ) : failedWithoutData ? null : workspaces.length === 0 ? (
+        ) : failedWithoutData ? null : workspaces.length === 0 && myInvitations.length === 0 ? (
           <EmptyState
             icon={<Home sx={{ fontSize: 28 }} />}
             title="No tienes hogares todavía"

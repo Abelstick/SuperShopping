@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { supabase } from '@/lib/supabase'
+import { ensureAffected } from '@/shared/utils/supabaseResult'
 
 export const usePurchaseStore = create((set, get) => ({
   purchases: [],
@@ -81,19 +82,19 @@ export const usePurchaseStore = create((set, get) => ({
   },
 
   deletePurchase: async (id) => {
-    const { error } = await supabase.from('purchases').delete().eq('id', id)
+    const { error } = ensureAffected(await supabase.from('purchases').delete().eq('id', id).select('id'))
     if (!error) set((s) => ({ purchases: s.purchases.filter((p) => p.id !== id) }))
     return { error }
   },
 
   deletePurchases: async (ids) => {
-    const { error } = await supabase.from('purchases').delete().in('id', ids)
+    const { error } = ensureAffected(await supabase.from('purchases').delete().in('id', ids).select('id'))
     if (!error) set((s) => ({ purchases: s.purchases.filter((p) => !ids.includes(p.id)) }))
     return { error }
   },
 
   deletePurchaseItem: async (id) => {
-    const { error } = await supabase.from('purchase_items').delete().eq('id', id)
+    const { error } = ensureAffected(await supabase.from('purchase_items').delete().eq('id', id).select('id'))
     if (!error) set((s) => ({ purchaseItems: s.purchaseItems.filter((i) => i.id !== id) }))
     return { error }
   },

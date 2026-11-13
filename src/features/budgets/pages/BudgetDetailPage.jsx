@@ -27,6 +27,7 @@ import { normalizeText } from '@/shared/utils/text'
 import BudgetStatusChip from '../components/BudgetStatusChip'
 import { BudgetMeter, CategoryIcon, ConfirmDialog, MobileActionBar, NameList, PageHeader, RowDivider, Section } from '@/shared/components/ui'
 import { FS, NUM, reveal } from '@/theme/tokens'
+import { canEditRole } from '@/features/workspace/constants'
 
 
 function isPreviousCalendarMonth(iso) {
@@ -461,7 +462,7 @@ export default function BudgetDetailPage() {
   const target = currentBudget?.target_amount || 0
   const overBudget = Boolean(target && totalEst > target)
 
-  const isEditor = ['owner', 'editor'].includes(currentWorkspace?.my_role)
+  const isEditor = canEditRole(currentWorkspace?.my_role)
   const primaryIsStart = isEditor && currentBudget?.status === 'active'
 
   const addedProductIds = useMemo(
