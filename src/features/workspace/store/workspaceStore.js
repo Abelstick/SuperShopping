@@ -91,11 +91,11 @@ export const useWorkspaceStore = create(
         return { error }
       },
 
-      // Últimos cambios del inventario del hogar. El autor se resuelve con `members`.
+      // Últimos cambios del inventario del hogar, con el perfil de quien los hizo.
       fetchActivity: async (workspaceId) => {
         const { data, error } = await supabase
           .from('product_history')
-          .select('id, action, changes, created_at, user_id, products(name)')
+          .select('id, action, changes, created_at, user_id, products(name), profiles(id, full_name, email, avatar_url)')
           .eq('workspace_id', workspaceId)
           .order('created_at', { ascending: false })
           .limit(30)

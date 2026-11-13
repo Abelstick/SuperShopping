@@ -34,7 +34,7 @@ function CheckRing({ label, disabled, busy, onClick }) {
 }
 
 // ── Producto pendiente ───────────────────────────────────────────────────────
-export function PendingItemRow({ item, lock, isLockedByMe, sessionId, userId, onOpen, onQuickAdd, busy, selectMode, selected, onToggleSelect, compact }) {
+export function PendingItemRow({ item, lock, isLockedByMe, sessionId, onOpen, onQuickAdd, busy, selectMode, selected, onToggleSelect, compact }) {
   const st = useTheme().vars.palette.stock
   const { lockItem, unlockItem } = useShoppingStore()
   const { enqueueSnackbar } = useSnackbar()
@@ -47,8 +47,8 @@ export function PendingItemRow({ item, lock, isLockedByMe, sessionId, userId, on
     if (isLockedByMe) {
       await unlockItem(sessionId, item.id)
     } else if (!isLocked) {
-      const { error } = await lockItem(sessionId, item.id, userId)
-      if (error) enqueueSnackbar('No se pudo reservar el producto', { variant: 'warning' })
+      const { error } = await lockItem(sessionId, item.id)
+      if (error) enqueueSnackbar(error.code === '55P03' ? 'Otra persona lo está comprando' : 'No se pudo reservar el producto', { variant: 'warning' })
     }
   }
 

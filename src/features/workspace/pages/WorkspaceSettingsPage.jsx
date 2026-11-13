@@ -61,7 +61,8 @@ function ActivityFeed({ workspaceId, members, fetchActivity }) {
   return (
     <Card>
       {state.items.map((a, i) => {
-        const author = profileOf(a.user_id)
+        // El perfil viene con el cambio: así se ve también el autor que ya no es miembro
+        const author = a.profiles ?? profileOf(a.user_id)
         const name = author?.full_name || author?.email || 'Alguien'
         return (
           <Box key={a.id}>

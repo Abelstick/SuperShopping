@@ -14,7 +14,7 @@ import { useAuthStore } from '@/features/auth/store/authStore'
 import { useWorkspaceStore } from '@/features/workspace/store/workspaceStore'
 import { useBudgetStore } from '@/features/budgets/store/budgetStore'
 import { useInventoryStore } from '@/features/inventory/store/inventoryStore'
-import { useShoppingStore } from '../store/shoppingStore'
+import { useShoppingStore, PRESENCE_INTERVAL_MS } from '../store/shoppingStore'
 import { usePurchaseStore } from '@/features/purchases/store/purchaseStore'
 import AdjustTotalDialog from '@/features/purchases/components/AdjustTotalDialog'
 import EditPurchaseItemDialog from '@/features/purchases/components/EditPurchaseItemDialog'
@@ -143,7 +143,7 @@ export default function ShoppingModePage() {
     session, participants, purchaseItems,
     loading, startSession, fetchSession, completeSession,
     getTotals, getLockForItem, removePurchaseItem, removePurchaseItemsBulk, unsubscribe,
-    updatePurchaseItem, addPurchaseItem, unlockItem, changePurchaseItemQuantity,
+    updatePurchaseItem, addPurchaseItem, unlockItem, changePurchaseItemQuantity, touchPresence,
   } = useShoppingStore()
   const { createPurchase, updatePurchase } = usePurchaseStore()
   const { enqueueSnackbar, closeSnackbar } = useSnackbar()
@@ -308,6 +308,17 @@ export default function ShoppingModePage() {
       fetchCategories(currentWorkspace.id)
     }
   }, [currentWorkspace?.id])
+
+  // Presencia: mantiene vivas mis reservas mientras la compra está abierta y a la vista. Si la
+  // pantalla queda oculta más de 2 minutos, otra persona puede tomar lo que tenía reservado.
+  const liveSessionId = session?.status === 'active' ? session.id : null
+  useEffect(() => {
+    if (!liveSessionId) return undefined
+    const tick = () => { if (document.visibilityState === 'visible') touchPresence(liveSessionId) }
+    const timer = setInterval(tick, PRESENCE_INTERVAL_MS)
+    document.addEventListener('visibilitychange', tick)
+    return () => { clearInterval(timer); document.removeEventListener('visibilitychange', tick) }
+  }, [liveSessionId, touchPresence])
 
   const totalSpent = getTotals()
   const budget = currentBudget?.target_amount || 0
@@ -574,7 +585,6 @@ export default function ShoppingModePage() {
                       lock={lock}
                       isLockedByMe={lock?.user_id === user?.id}
                       sessionId={session?.id}
-                      userId={user?.id}
                       busy={quickAdding.has(item.id)}
                       onOpen={(it) => setAddItemDialog({ open: true, item: it })}
                       onQuickAdd={handleQuickAdd}

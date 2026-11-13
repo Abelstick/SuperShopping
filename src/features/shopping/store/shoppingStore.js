@@ -3,6 +3,12 @@ import { supabase } from '@/lib/supabase'
 import { ensureAffected } from '@/shared/utils/supabaseResult'
 
 const UNIQUE_VIOLATION = '23505'
+
+// Presencia en Modo Compra: cada dispositivo la marca cada PRESENCE_INTERVAL_MS. Una reserva cuyo
+// dueño lleva más de LOCK_STALE_MS sin marcarla se considera abandonada (igual que en la base,
+// ver claim_product_lock) y otra persona puede tomarla.
+export const PRESENCE_INTERVAL_MS = 45 * 1000
+export const LOCK_STALE_MS = 2 * 60 * 1000
 const ITEM_SELECT = `*, profiles!purchase_items_purchased_by_fkey(id, full_name, avatar_url), categories(name, color)`
 
 // Agrega una fila o, si ya está (la trajo antes un evento en vivo), la actualiza
@@ -68,6 +74,7 @@ export const useShoppingStore = create((set, get) => ({
       await supabase
         .from('shopping_participants')
         .upsert({ session_id: data.id, user_id: userId }, { onConflict: 'session_id,user_id' })
+      await get().touchPresence(data.id)
       await get().subscribeToSession(data.id)
     }
     set({ loading: false })
@@ -78,7 +85,17 @@ export const useShoppingStore = create((set, get) => ({
     await supabase
       .from('shopping_participants')
       .upsert({ session_id: sessionId, user_id: userId }, { onConflict: 'session_id,user_id' })
+    // Al volver a una compra, el upsert no renueva last_seen_at: se marca aparte
+    await get().touchPresence(sessionId)
     await get().subscribeToSession(sessionId)
+  },
+
+  // Mantiene vivas las reservas de este dispositivo. Usa la hora del servidor.
+  touchPresence: async (sessionId) => {
+    if (!sessionId) return { error: null }
+    const { error } = await supabase.rpc('touch_shopping_presence', { p_session_id: sessionId })
+    if (error) console.error('touchPresence failed', error)
+    return { error }
   },
 
   fetchSession: async (sessionId, userId) => {
@@ -170,10 +187,11 @@ export const useShoppingStore = create((set, get) => ({
     return data ?? null
   },
 
-  lockItem: async (sessionId, budgetItemId, userId) => {
-    const { error } = await supabase
-      .from('product_locks')
-      .insert({ session_id: sessionId, budget_item_id: budgetItemId, user_id: userId })
+  // Reserva con la base: si la reserva existente está abandonada se reemplaza; si otra persona
+  // activa la tiene, devuelve error con code 55P03.
+  lockItem: async (sessionId, budgetItemId) => {
+    const { error } = await supabase.rpc('claim_product_lock', { p_session_id: sessionId, p_budget_item_id: budgetItemId })
+    if (!error) await get().fetchLocks(sessionId)
     return { error }
   },
 
@@ -366,5 +384,13 @@ export const useShoppingStore = create((set, get) => ({
   },
 
   getTotals: () => get().purchaseItems.reduce((acc, i) => acc + (i.total_price || 0), 0),
-  getLockForItem: (budgetItemId) => get().locks.find((l) => l.budget_item_id === budgetItemId) || null,
+  // Reserva vigente de un producto. Las abandonadas (su dueño sin presencia reciente) se ignoran.
+  getLockForItem: (budgetItemId) => {
+    const { locks, participants } = get()
+    const lock = locks.find((l) => l.budget_item_id === budgetItemId)
+    if (!lock) return null
+    const owner = participants.find((p) => p.user_id === lock.user_id)
+    const lastSeen = owner?.last_seen_at ? Date.parse(owner.last_seen_at) : 0
+    return Date.now() - lastSeen > LOCK_STALE_MS ? null : lock
+  },
 }))
